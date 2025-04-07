@@ -1,0 +1,9 @@
+jax
+jaxlib
+dm-haiku
+optax
+jraph
+pyvista
+meshio
+matplotlib
+numpy
