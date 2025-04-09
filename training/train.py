@@ -18,6 +18,8 @@ def model_fn(graph):
     output = decode_node_fn(graph.nodes)
     return output
 
-def run_training():
+def run_training(train_data, edges):
     print("Training stub started...")
+
+    
     # TODO: Load dataset, initialize model and train
