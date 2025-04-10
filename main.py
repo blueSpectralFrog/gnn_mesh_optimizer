@@ -1,5 +1,5 @@
 from training.train import run_training
-import training.utils as utils
+import data.utils_data as utils_data
 import data.mesh_loader as ml
 
 ################################################################################################
@@ -10,7 +10,9 @@ train_size = 0.8
 
 if __name__ == "__main__":
 
-    node_data, edges = ml.extract_graph_inputs(data_directory, 'displacement')
-    train_data, test_data = utils.splitter(node_data, train_size)
+    ref_geom, node_data, edges = ml.extract_graph_inputs(data_directory, 'displacement')
+    train_data, test_data = utils_data.splitter(node_data, train_size)
 
-    run_training(train_data, edges)
+    config_dict = {}
+
+    run_training(config_dict, train_data, edges, ref_geom, data_directory)

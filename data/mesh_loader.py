@@ -3,22 +3,24 @@
 import meshio 
 import numpy as np
 import os
-import training.utils as utils
+import data.utils_data as utils_data
 
 def read_data(data_dir):
 
     # find all .vtk files in directory
     files = sorted([os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.vtk')])
 
+    node_position = {}
     node_data = {}
     cell_data = {}
-
+    
     for file_number, file in enumerate(files):
         
         # read file information
         mesh = meshio.read(file)
         
         # split into node and cell data
+        node_position[file_number] = mesh.points
         node_data[file_number] = mesh.point_data
         cell_data[file_number] = mesh.cell_data
         
@@ -29,7 +31,7 @@ def read_data(data_dir):
     print(f'Node data read:{[key for key in mesh.point_data.keys()]}')
     print(f'Cell data read:{[key for key in mesh.cell_data.keys()]}')
     
-    return node_data, cell_data, mesh_connectivity, cell_type
+    return node_position, node_data, cell_data, mesh_connectivity, cell_type
 
 def stack_simulation_data(node_data_dict, sim_output_data_label):
     """ 
@@ -50,10 +52,10 @@ def stack_simulation_data(node_data_dict, sim_output_data_label):
 
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    node_data_dict, _, mesh_connectivity, cell_type = read_data(data_dir)
+    node_position, node_data_dict, _, mesh_connectivity, cell_type = read_data(data_dir)
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label)
 
     # get graph edges
-    edges = utils.cells_to_edges(mesh_connectivity, cell_type)
+    edges = utils_data.cells_to_edges(mesh_connectivity, cell_type)
 
-    return node_data, edges
+    return node_position[0], node_data, edges
