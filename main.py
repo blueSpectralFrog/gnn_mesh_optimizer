@@ -10,9 +10,9 @@ train_size = 0.8
 
 if __name__ == "__main__":
 
-    ref_geom, node_data, edges = ml.extract_graph_inputs(data_directory, 'displacement')
-    train_data, test_data = utils_data.splitter(node_data, train_size)
+    graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
+    train_data, test_data = utils_data.splitter(graph_inputs.node_data, train_size)
 
     config_dict = {}
 
-    run_training(config_dict, train_data, edges, ref_geom, data_directory)
+    run_training(config_dict, train_data, graph_inputs, data_directory)

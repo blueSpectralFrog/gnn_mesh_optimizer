@@ -11,6 +11,53 @@ EDGE_PATTERNS = {
     "triangle": [(0, 1), (1, 2), (2, 0)]
 }
 
+ELEMENT_VOLUME_BKDOWN = {
+    "tetrahedron": [[0, 1, 2, 3]],
+    "hexahedron": [[0, 5, 6, 7],
+                   [2, 4, 6, 7],
+                   [0, 1, 3, 6],
+                   [3, 4, 6, 0],
+                   [1, 2, 3, 6],
+                   [3, 4, 6, 2],],  # Vertical edges
+}
+
+class ReferenceGeometry:
+    def __init__(self, graph_inputs):
+        self.init_node_position = graph_inputs.node_position[0]
+        self._n_real_nodes, self._output_dim = self.init_node_position.shape
+
+        self.elements_vol = np.zeros(self.init_node_position.shape[0])
+        for index, element in enumerate(graph_inputs.mesh_connectivity):
+            element_vol = 0
+            for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
+                element_vol += self.element_volume(self.init_node_position[element[[n_tet]]][0])
+            self.elements_vol[index] = element_vol
+        
+    def element_volume(self, tet_vert):
+
+        def _determinant_3x3(m):
+            return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+                    m[1][0] * (m[0][1] * m[2][2] - m[0][2] * m[2][1]) +
+                    m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]))
+
+
+        def _subtract(a, b):
+            return (a[0] - b[0],
+                    a[1] - b[1],
+                    a[2] - b[2])
+
+        def _tetrahedron_calc_volume(tet_vert):
+            return (abs(_determinant_3x3((_subtract(tet_vert[0], tet_vert[1]),
+                                        _subtract(tet_vert[1], tet_vert[2]),
+                                        _subtract(tet_vert[2], tet_vert[3]),
+                                        ))) / 6.0)
+
+        return _tetrahedron_calc_volume(tet_vert)
+        # TODO:
+        # need constitutive law insertion here 
+
+        
+
 def splitter(data, train_size=0.8, rng_key=None):
     """
     Split input data into train and test data

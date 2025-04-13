@@ -5,6 +5,15 @@ import numpy as np
 import os
 import data.utils_data as utils_data
 
+class GraphInputs:
+        def __init__(self, node_position, node_data, cell_data, mesh_connectivity, cell_type, edges):
+            self.node_position = node_position
+            self.node_data = node_data
+            self.cell_data = cell_data
+            self.mesh_connectivity = mesh_connectivity
+            self.cell_type = cell_type
+            self.edges = edges
+
 def read_data(data_dir):
 
     # find all .vtk files in directory
@@ -52,10 +61,10 @@ def stack_simulation_data(node_data_dict, sim_output_data_label):
 
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    node_position, node_data_dict, _, mesh_connectivity, cell_type = read_data(data_dir)
+    node_position, node_data_dict, cell_data, mesh_connectivity, cell_type = read_data(data_dir)
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label)
 
     # get graph edges
     edges = utils_data.cells_to_edges(mesh_connectivity, cell_type)
 
-    return node_position[0], node_data, edges
+    return GraphInputs(node_position, node_data, cell_data, mesh_connectivity, cell_type, edges)

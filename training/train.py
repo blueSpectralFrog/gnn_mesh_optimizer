@@ -3,10 +3,8 @@ import jax.numpy as jnp
 import optax
 import haiku as hk
 
-from utils import create_emulator
-from models.encoder import encode_node_fn
-from models.processor import make_gnn_core
-from models.decoder import decode_node_fn
+from training.utils import create_emulator
+import data.utils_data as utils_data
 from physics.loss_terms import physics_residual_loss
 
 def model_fn(graph):
@@ -19,9 +17,11 @@ def model_fn(graph):
     output = decode_node_fn(graph.nodes)
     return output
 
-def run_training(emulator_config_dict, train_data, edges, ref_geom, trained_params_dir):
+def run_training(emulator_config_dict, train_data, graph_inputs, trained_params_dir):
 
     print("Training stub started...")
 
-    create_emulator(emulator_config_dict, train_data, edges, trained_params_dir, ref_geom)
+    ref_geom = utils_data.ReferenceGeometry(graph_inputs)
+
+    create_emulator(emulator_config_dict, train_data, trained_params_dir, graph_inputs, ref_geom)
     # TODO: Load dataset, initialize model and train
