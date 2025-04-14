@@ -88,8 +88,8 @@ class PrimalGraphEmulator(nn.Module):
     senders: Sequence[int]
     n_total_nodes: int
     output_dim: int
-    real_node_indices: Sequence[bool]
-    boundary_adjust_fn: Sequence[bool] = None
+    # real_node_indices: Sequence[bool]
+    # boundary_adjust_fn: Sequence[bool] = None
 
     @nn.compact
     def __call__(self, V: jnp.ndarray, E: jnp.ndarray, theta: jnp.ndarray, sow_latents=False):
@@ -137,7 +137,7 @@ class PrimalGraphEmulator(nn.Module):
         incoming_messages = aggregate_incoming_messages(E, self.receivers, self.n_total_nodes)
 
         # final local learned representation is a concatenation of vector embedding and incoming messages
-        z_local = nn.LayerNorm()(jnp.hstack((V, incoming_messages))[self.real_node_indices])
+        z_local = nn.LayerNorm()(jnp.hstack((V, incoming_messages))) #[self.real_node_indices])
 
         # used for rapid evaluations of decoder for fixed geometry
         if sow_latents: return z_local
@@ -159,8 +159,8 @@ class PrimalGraphEmulator(nn.Module):
         Upred = jnp.hstack(individual_mlp_predictions)
 
         # adjust predictions to account for displacement boundary conditions
-        if self.boundary_adjust_fn is not None:
-            Upred = self.boundary_adjust_fn(Upred)
+        # if self.boundary_adjust_fn is not None:
+        #     Upred = self.boundary_adjust_fn(Upred)
 
         # return displacment prediction array
         return Upred

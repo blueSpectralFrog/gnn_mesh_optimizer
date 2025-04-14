@@ -26,13 +26,26 @@ class ReferenceGeometry:
         self.init_node_position = graph_inputs.node_position[0]
         self._n_real_nodes, self._output_dim = self.init_node_position.shape
 
+        self.elements = graph_inputs.mesh_connectivity
+
         self.elements_vol = np.zeros(self.init_node_position.shape[0])
         for index, element in enumerate(graph_inputs.mesh_connectivity):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 element_vol += self.element_volume(self.init_node_position[element[[n_tet]]][0])
             self.elements_vol[index] = element_vol
-        
+
+        # TODO:
+        # need constitutive law insertion here 
+        from data.constitutive_law import isotropic_elastic
+        self.constitutive_law = isotropic_elastic
+
+        # TODO:
+        # Virtual nodes implementation? Need for larger meshes
+
+        self._output_dim = self.init_node_position.shape[-1]
+
+
     def element_volume(self, tet_vert):
 
         def _determinant_3x3(m):
@@ -53,10 +66,8 @@ class ReferenceGeometry:
                                         ))) / 6.0)
 
         return _tetrahedron_calc_volume(tet_vert)
-        # TODO:
-        # need constitutive law insertion here 
 
-        
+
 
 def splitter(data, train_size=0.8, rng_key=None):
     """

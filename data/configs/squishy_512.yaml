@@ -1,0 +1,10 @@
+n_epochs: 1000
+lower_bound: 1
+lr: 1e-4
+K: 5
+
+local_embed_dim: 40
+mlp_width: 128
+mlp_depth: 2
+
+rng_seed: 2001
