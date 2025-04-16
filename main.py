@@ -14,15 +14,24 @@ except ImportError:
 # define globals
 data_directory = 'C:\\Users\\deangeln\\Documents\\Papers\\gnn_mesh_optimizer\\data\\data_dir'
 task = 'squishy_512.yaml'
-train_size = 0.8
+train_size = 0.5
 ################################################################################################
 
 if __name__ == "__main__":
 
     graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
-    train_data, test_data = utils_data.splitter(graph_inputs.node_data, train_size)
+    
+    # Could also consider using nearest neighbors to find close nodes instead of splitting by element? 
+    # Radius adjustable by user for propagation speed.
+    train_cell_data, test_cell_data = utils_data.splitter(graph_inputs.mesh_connectivity, train_size)
+    graph_inputs.add(chosen_cells=train_cell_data, chosen_nodes=jnp.unique(jnp.hstack(train_cell_data)))
 
+    # readjust the senders/receivers in graph inputs to account for train/test split:
+    graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.chosen_cells, graph_inputs.cell_type)
+    
     config_path = f"./data/configs/{task}"
     config_dict = yaml.safe_load(open(f"{config_path}", 'r'))
     
-    run_training(config_dict, train_data, graph_inputs, data_directory)
+    run_training(config_dict, graph_inputs, data_directory)
+
+    graph_inputscell_data=test_cell_data

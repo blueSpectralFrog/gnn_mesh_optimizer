@@ -19,18 +19,17 @@ def create_config_dict(K: int, n_epochs: int, lr: float, output_dim: int, local_
             'rng_seed': rng_seed
             }
 
-def initialise_network_params(data_generator, ref_geom, model, rng_seed: int):
+def initialise_network_params(node_data_generator, edge_data_generator, ref_geom, model, rng_seed: int):
     key = random.PRNGKey(rng_seed)
 
-    ## PROBLEM HERE: data_generator IS NUMPY NDARRAY -> FIGURE OUT EQUIVALENT IN ORIGINAL SCRIPT
-    theta_init, _ = data_generator.get_data(0)
-    V_init = ref_geom._node_features
-    E_init = ref_geom._edge_features
+    theta_init = jnp.zeros(node_data_generator.shape)
+    V_init = node_data_generator[:,0]
+    E_init = edge_data_generator[:,0]
 
     params = model.init(key, V_init, E_init, theta_init)
     return params
 
-def init_emulator_full(config_dict: dict, data_generator, graph_inputs, ref_geom):
+def init_emulator_full(config_dict: dict, graph_inputs, ref_geom):
     emulator =  encoder.PrimalGraphEmulator(mlp_features=[config_dict['mlp_features']],
                                            latent_size=[config_dict['local_embed_dim']],
                                            K = config_dict['K'],
@@ -42,10 +41,11 @@ def init_emulator_full(config_dict: dict, data_generator, graph_inputs, ref_geom
                                         #    boundary_adjust_fn = ref_geom.boundary_adjust_fn
                                         )
     
-    params = initialise_network_params(data_generator, ref_geom, emulator, config_dict['rng_seed'])
+    # STOPPED HERE 
+    params = initialise_network_params(graph_inputs.node_data, graph_inputs.edge_data, ref_geom, emulator, config_dict['rng_seed'])
 
-def create_emulator(emulator_config_dict, train_data, graph_inputs, ref_geom):
+def create_emulator(emulator_config_dict, graph_inputs, ref_geom):
 
     # initialise varying geometry emulator (models.PrimalGraphEmulator) and parameters
-    emulator, params = init_emulator_full(emulator_config_dict, train_data, graph_inputs, ref_geom)
+    emulator, params = init_emulator_full(emulator_config_dict, graph_inputs, ref_geom)
     emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, ref_geom._node_features, ref_geom._edge_features, theta_norm)

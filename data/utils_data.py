@@ -23,23 +23,24 @@ ELEMENT_VOLUME_BKDOWN = {
 
 class ReferenceGeometry:
     def __init__(self, graph_inputs):
-        self.init_node_position = graph_inputs.node_position[0]
+        self.init_node_position = graph_inputs.node_position[0][graph_inputs.chosen_nodes]
         self._n_real_nodes, self._output_dim = self.init_node_position.shape
 
-        self.elements = graph_inputs.mesh_connectivity
+        self.elements = graph_inputs.chosen_cells
 
         self.elements_vol = np.zeros(self.init_node_position.shape[0])
-        for index, element in enumerate(graph_inputs.mesh_connectivity):
+        for index, element in enumerate(graph_inputs.chosen_cells):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
-                element_vol += self.element_volume(self.init_node_position[element[[n_tet]]][0])
+                # keep in mind that self.init_node_position is now the size of the training nodeset
+                element_vol += self.element_volume(graph_inputs.node_position[0][element[[n_tet]]][0])
             self.elements_vol[index] = element_vol
 
         # TODO:
         # need constitutive law insertion here 
         from data.constitutive_law import isotropic_elastic
         self.constitutive_law = isotropic_elastic
-
+        
         # TODO:
         # Virtual nodes implementation? Need for larger meshes
 
@@ -67,16 +68,14 @@ class ReferenceGeometry:
 
         return _tetrahedron_calc_volume(tet_vert)
 
-
-
-def splitter(data, train_size=0.8, rng_key=None):
+def splitter(element_data, train_size=0.8, rng_key=None):
     """
     Split input data into train and test data
     """
     if rng_key is None:
         rng_key = jax.random.PRNGKey(0)
         
-    n = data.shape[0]
+    n = element_data.shape[0]
     indices = jnp.arange(n)
     shuffled_indices = jax.random.permutation(rng_key, indices)
 
@@ -84,7 +83,7 @@ def splitter(data, train_size=0.8, rng_key=None):
     train_idx = shuffled_indices[:split_idx]
     test_idx = shuffled_indices[split_idx:]
 
-    return data[train_idx], data[test_idx]
+    return element_data[train_idx], element_data[test_idx]
 
 def cells_to_edges(cells, cellConnectivity):
 
