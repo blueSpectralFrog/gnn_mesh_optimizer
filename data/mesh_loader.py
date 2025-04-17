@@ -56,6 +56,11 @@ def read_data(data_dir):
     
     return node_position, node_data, edge_data, cell_data, mesh_connectivity, cell_type, edges
 
+def get_relative_distance_data(node_position, target_idx, source_idx):
+    rel_pos = node_position[target_idx] - node_position[source_idx]
+    rel_norm = jnp.linalg.norm(rel_pos, axis=1, keepdims=True)
+    return jnp.concatenate([rel_pos, rel_norm], axis=1)
+        
 def stack_simulation_data(data_dict, sim_output_data_label):
     """ 
     Take dictionary data with first-layer keys as timesteps and combine it into one array

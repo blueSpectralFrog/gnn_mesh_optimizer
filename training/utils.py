@@ -22,7 +22,9 @@ def create_config_dict(K: int, n_epochs: int, lr: float, output_dim: int, local_
 def initialise_network_params(node_data_generator, edge_data_generator, ref_geom, model, rng_seed: int):
     key = random.PRNGKey(rng_seed)
 
-    theta_init = jnp.zeros(node_data_generator.shape)
+    # TODO:
+    # What is theta and why is it a 1x4 array
+    theta_init = jnp.zeros((4,)) 
     V_init = node_data_generator[:,0]
     E_init = edge_data_generator[:,0]
 
@@ -40,9 +42,10 @@ def init_emulator_full(config_dict: dict, graph_inputs, ref_geom):
                                         #    real_node_indices = ref_geom._real_node_indices,
                                         #    boundary_adjust_fn = ref_geom.boundary_adjust_fn
                                         )
-    
-    # STOPPED HERE 
-    params = initialise_network_params(graph_inputs.node_data, graph_inputs.edge_data, ref_geom, emulator, config_dict['rng_seed'])
+
+    params = initialise_network_params(graph_inputs.node_data[graph_inputs.chosen_nodes], graph_inputs.chosen_edge_data, ref_geom, emulator, config_dict['rng_seed'])
+
+    return emulator, params
 
 def create_emulator(emulator_config_dict, graph_inputs, ref_geom):
 
