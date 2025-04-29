@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import models.encoder as encoder
 import jax.random as random
+from flax.core import freeze, unfreeze
 
 from typing import Sequence
 
@@ -18,6 +19,24 @@ def create_config_dict(K: int, n_epochs: int, lr: float, output_dim: int, local_
             'mlp_features': mlp_features,
             'rng_seed': rng_seed
             }
+
+def gen_zero_params_gnn(model, params_randL):
+    node_decode_first_mlp_index = model.K*2 + 3
+    node_decode_last_mlp_index = node_decode_first_mlp_index + model.output_dim[0]
+
+    mlp_depth = len(model.mlp_features)
+    index = node_decode_first_mlp_index
+
+    final_weights_layer_decoder_rand = params_randL['params'][f'FlaxMLP_{index}'][f'Dense_{mlp_depth}']['kernel']
+    final_weights_layer_decoder_zero = jnp.zeros_like(final_weights_layer_decoder_rand)
+
+    params_zero = unfreeze(params_randL)
+
+    for index in range(node_decode_first_mlp_index, node_decode_last_mlp_index):
+        params_zero['params'][f'FlaxMLP_{index}'][f'Dense_{mlp_depth}']['kernel'] = final_weights_layer_decoder_zero
+
+    return freeze(params_zero)
+
 
 def initialise_network_params(node_data_generator, edge_data_generator, ref_geom, model, rng_seed: int):
     key = random.PRNGKey(rng_seed)
@@ -51,4 +70,7 @@ def create_emulator(emulator_config_dict, graph_inputs, ref_geom):
 
     # initialise varying geometry emulator (models.PrimalGraphEmulator) and parameters
     emulator, params = init_emulator_full(emulator_config_dict, graph_inputs, ref_geom)
-    emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, ref_geom._node_features, ref_geom._edge_features, theta_norm)
+
+    emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, graph_inputs.node_data, graph_inputs.chosen_edge_data, theta_norm)
+
+    return emulator_pred_fn, params, emulator

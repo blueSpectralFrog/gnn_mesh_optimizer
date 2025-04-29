@@ -12,7 +12,7 @@ except ImportError:
 
 ################################################################################################
 # define globals
-data_directory = 'C:\\Users\\deangeln\\Documents\\Papers\\gnn_mesh_optimizer\\data\\data_dir'
+data_directory = 'C:\\Users\\ndnde\\Documents\\Projects\\ML\\gnn_mesh_optimizer\\data\\data_dir'
 task = 'squishy_512.yaml'
 train_size = 0.5
 ################################################################################################
@@ -30,6 +30,7 @@ if __name__ == "__main__":
     # readjust the senders/receivers in graph inputs to account for train/test split:
     graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.chosen_cells, graph_inputs.cell_type)
     
+    # select the edge data based on chosen cells ONLY
     chosen_edge_data = jnp.zeros((graph_inputs.edges.shape[0], 
                                   graph_inputs.node_data.shape[1],
                                   4))
