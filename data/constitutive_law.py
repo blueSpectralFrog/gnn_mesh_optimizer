@@ -29,3 +29,22 @@ def isotropic_elastic(params, epsilon):
     # Strain energy density
     W = 0.5 * lam * (trace_eps ** 2) + mu * trace_eps_squared
     return W
+
+####################################################
+## Define material parameter boundaries
+####################################################
+
+params_lb = jnp.array([5000.]*2)
+params_ub = jnp.array([15000.]*2)
+
+####################################################
+## Sample parameters on log or uniform scale
+####################################################
+
+log_sampling = False
+
+####################################################
+## Set number of parameters to sample at each epoch
+####################################################
+
+epoch_size = 50

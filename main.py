@@ -13,6 +13,7 @@ except ImportError:
 ################################################################################################
 # define globals
 data_directory = 'C:\\Users\\ndnde\\Documents\\Projects\\ML\\gnn_mesh_optimizer\\data\\data_dir'
+normalisation_statistics_dir = 'C:\\Users\\ndnde\\Documents\\Projects\\ML\\gnn_mesh_optimizer\\data'
 task = 'squishy_512.yaml'
 train_size = 0.5
 ################################################################################################
@@ -35,7 +36,7 @@ if __name__ == "__main__":
                                   graph_inputs.node_data.shape[1],
                                   4))
     for interval in range(graph_inputs.node_data.shape[1]):
-        chosen_edge_data.at[:, interval].set(ml.get_relative_distance_data(graph_inputs.node_data[:, interval, :],
+        chosen_edge_data = chosen_edge_data.at[:, interval].set(ml.get_relative_distance_data(graph_inputs.node_position[:, interval, :],
                                                                 graph_inputs.edges[:,1],
                                                                 graph_inputs.edges[:,0]))
     graph_inputs.add(chosen_edge_data=chosen_edge_data)
@@ -43,6 +44,6 @@ if __name__ == "__main__":
     config_path = f"./data/configs/{task}"
     config_dict = yaml.safe_load(open(f"{config_path}", 'r'))
     
-    run_training(config_dict, graph_inputs, data_directory)
+    run_training(config_dict, graph_inputs, data_directory, normalisation_statistics_dir)
 
     graph_inputs.cell_data=test_cell_data

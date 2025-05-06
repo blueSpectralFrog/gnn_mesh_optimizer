@@ -13,6 +13,11 @@ import data.utils_data as utils_data
 from physics.loss_terms import physics_residual_loss
 from physics.utils_potential_energy import total_potential_energy
 
+#################################################################
+OPTIMISATION_ALGORITHM = optax.adam
+
+#################################################################
+
 def compute_loss_pinn(params, theta_tuple, pred_fn, ref_geom_data, external_forces):
     """Compute total potential energy from emulator prediction"""
 
@@ -139,7 +144,7 @@ class PhysicsLearner:
             with pathlib.Path(self.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
                 pickle.dump(self.params, fp)
 
-def run_training(emulator_config_dict, graph_inputs, trained_params_dir):
+def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normalisation_statistics_dir):
 
     print("Training stub started...")
 
@@ -148,7 +153,12 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir):
     emulator_config_dict['mlp_features'] = emulator_config_dict['mlp_width']*emulator_config_dict['mlp_depth']
     emulator_config_dict['output_dim'] = ref_geom._output_dim
 
-    emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, ref_geom)
+    train_dg = utils_data.DataGenerator(normalisation_statistics_dir)
+
+    emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, train_dg, ref_geom)
 
     # zero out the weights in the last layer of the decoder FCNNs
     params = training.utils.gen_zero_params_gnn(emulator, params)
+
+    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom, external_forces, logging, results_save_dir, summary_writer)
+

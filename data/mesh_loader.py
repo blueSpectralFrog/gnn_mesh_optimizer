@@ -66,13 +66,23 @@ def stack_simulation_data(data_dict, sim_output_data_label):
     Take dictionary data with first-layer keys as timesteps and combine it into one array
     """
 
-    data = np.zeros((data_dict[0][sim_output_data_label].shape[0],
-                        len(data_dict),
-                        data_dict[0][sim_output_data_label].shape[1]))
+    if sim_output_data_label:
+        data = np.zeros((data_dict[0][sim_output_data_label].shape[0],
+                            len(data_dict),
+                            data_dict[0][sim_output_data_label].shape[1]))
+        
+        for frame, key in enumerate(data_dict.keys()):
+            for node_index, node_disp in enumerate(data_dict[key][sim_output_data_label]):
+                data[node_index][frame] = node_disp
 
-    for frame, key in enumerate(data_dict.keys()):
-        for node_index, node_disp in enumerate(data_dict[key][sim_output_data_label]):
-            data[node_index][frame] = node_disp
+    elif sim_output_data_label==None:
+        data = np.zeros((data_dict[0].shape[0],
+                            len(data_dict),
+                            data_dict[0].shape[1]))
+     
+        for frame in data_dict.keys():
+            for node_index, node_disp in enumerate(data_dict[frame]):
+                data[node_index][frame] = node_disp
 
     print(f'Input {sim_output_data_label} node data has shape: {data.shape}')
 
@@ -82,6 +92,7 @@ def extract_graph_inputs(data_dir, sim_output_data_label):
 
     node_position, node_data_dict, edge_data, cell_data, mesh_connectivity, cell_type, edges = read_data(data_dir)
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label)
+    node_position = stack_simulation_data(node_position, None)
 
     return GraphInputs(node_position=node_position, node_data=node_data, edge_data=edge_data, cell_data=cell_data,
                         mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges)
