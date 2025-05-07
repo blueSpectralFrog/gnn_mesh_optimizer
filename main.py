@@ -21,7 +21,7 @@ train_size = 0.5
 if __name__ == "__main__":
 
     graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
-    
+
     # Could also consider using nearest neighbors to find close nodes instead of splitting by element? 
     # Radius adjustable by user for propagation speed.
     train_cell_data, test_cell_data = utils_data.splitter(graph_inputs.mesh_connectivity, train_size)

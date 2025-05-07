@@ -88,11 +88,21 @@ def stack_simulation_data(data_dict, sim_output_data_label):
 
     return data
 
+def identify_dirichlet_boundary(node_displacement):
+    dirichlet_idx = jnp.zeros((node_displacement.shape[0], 1))
+    for node_idx, node in enumerate(node_displacement[:,-1]):
+        if np.linalg.norm(node) == 0:
+            dirichlet_idx = dirichlet_idx.at[node_idx].set(1)
+
+    return dirichlet_idx
+
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    node_position, node_data_dict, edge_data, cell_data, mesh_connectivity, cell_type, edges = read_data(data_dir)
-    node_data = stack_simulation_data(node_data_dict, sim_output_data_label)
-    node_position = stack_simulation_data(node_position, None)
+    node_position, node_data_dict, edge_sim_data, cell_data, mesh_connectivity, cell_type, edges = read_data(data_dir)
+    node_data = stack_simulation_data(node_data_dict, sim_output_data_label) # displacement data
+    node_position = stack_simulation_data(node_position, None) # node position data
 
-    return GraphInputs(node_position=node_position, node_data=node_data, edge_data=edge_data, cell_data=cell_data,
+    dirichlet_boundary_nodes = identify_dirichlet_boundary(node_data) # vertice data, not including fibre information
+
+    return GraphInputs(vertex_data=dirichlet_boundary_nodes, node_position=node_position, node_data=node_data, edge_sim_data=edge_sim_data, cell_data=cell_data,
                         mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges)

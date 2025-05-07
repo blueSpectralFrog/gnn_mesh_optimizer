@@ -38,18 +38,18 @@ def gen_zero_params_gnn(model, params_randL):
     return freeze(params_zero)
 
 
-def initialise_network_params(node_data_generator, edge_data_generator, ref_geom, model, material_data_generator, rng_seed: int):
+def initialise_network_params(vertex_data_generator, edge_data_generator, ref_geom, model, material_data_generator, rng_seed: int):
     key = random.PRNGKey(rng_seed)
 
     theta_init, _ = material_data_generator.get_data(0)
-    V_init = node_data_generator[:,0]
+    V_init = vertex_data_generator[:]
     E_init = edge_data_generator[:,0]
 
     params = model.init(key, V_init, E_init, theta_init)
     return params
 
 def init_emulator_full(config_dict: dict, graph_inputs, material_data_generator, ref_geom):
-    emulator =  encoder.PrimalGraphEmulator(mlp_features=[config_dict['mlp_features']],
+    emulator =  encoder.PrimalGraphEmulator(mlp_features=config_dict['mlp_features'],
                                            latent_size=[config_dict['local_embed_dim']],
                                            K = config_dict['K'],
                                            receivers = graph_inputs.edges[:,1],
@@ -60,7 +60,7 @@ def init_emulator_full(config_dict: dict, graph_inputs, material_data_generator,
                                         #    boundary_adjust_fn = ref_geom.boundary_adjust_fn
                                         )
 
-    params = initialise_network_params(graph_inputs.node_position[graph_inputs.chosen_nodes], 
+    params = initialise_network_params(graph_inputs.vertex_data[graph_inputs.chosen_nodes], 
                                        graph_inputs.chosen_edge_data, 
                                        ref_geom, 
                                        emulator, 
@@ -74,6 +74,6 @@ def create_emulator(emulator_config_dict, graph_inputs, material_data_generator,
     # initialise varying geometry emulator (models.PrimalGraphEmulator) and parameters
     emulator, params = init_emulator_full(emulator_config_dict, graph_inputs, material_data_generator, ref_geom)
 
-    emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, graph_inputs.node_data, graph_inputs.chosen_edge_data, theta_norm)
+    emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, graph_inputs.vertex_data, graph_inputs.chosen_edge_data, theta_norm)
 
     return emulator_pred_fn, params, emulator
