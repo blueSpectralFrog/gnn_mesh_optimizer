@@ -67,22 +67,22 @@ def stack_simulation_data(data_dict, sim_output_data_label):
     """
 
     if sim_output_data_label:
-        data = np.zeros((data_dict[0][sim_output_data_label].shape[0],
+        data = jnp.zeros((data_dict[0][sim_output_data_label].shape[0],
                             len(data_dict),
                             data_dict[0][sim_output_data_label].shape[1]))
         
         for frame, key in enumerate(data_dict.keys()):
             for node_index, node_disp in enumerate(data_dict[key][sim_output_data_label]):
-                data[node_index][frame] = node_disp
+                data = data.at[(node_index, frame)].set(node_disp)
 
     elif sim_output_data_label==None:
-        data = np.zeros((data_dict[0].shape[0],
+        data = jnp.zeros((data_dict[0].shape[0],
                             len(data_dict),
                             data_dict[0].shape[1]))
      
         for frame in data_dict.keys():
             for node_index, node_disp in enumerate(data_dict[frame]):
-                data[node_index][frame] = node_disp
+                data = data.at[(node_index, frame)].set(node_disp)
 
     print(f'Input {sim_output_data_label} node data has shape: {data.shape}')
 

@@ -24,6 +24,11 @@ ELEMENT_VOLUME_BKDOWN = {
                    [3, 4, 6, 2],],  # Vertical edges
 }
 
+class ExtForceTemp:
+    def __init__(self):
+        self.body_force = None
+        self.surface_force = None
+        
 class DataGenerator:
     """Class for generating input theta data points at which the PI-GNN emulator is trained"""
 
@@ -123,23 +128,26 @@ class ReferenceGeometry:
 
         self.elements = graph_inputs.chosen_cells
 
-        self.elements_vol = np.zeros(self.init_node_position.shape[0])
+        self.elements_vol = jnp.zeros(self.elements.shape[0])
         for index, element in enumerate(graph_inputs.chosen_cells):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
                 element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[[n_tet]]][0])
-            self.elements_vol[index] = element_vol
+            self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
         # TODO:
         # need constitutive law insertion here 
-        from data.constitutive_law import isotropic_elastic
+        from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
+        self.Jtransform = J_transformation_fn
         
         # TODO:
         # Virtual nodes implementation? Need for larger meshes
 
         self._output_dim = self.init_node_position.shape[-1]
+
+        self._fibre_field = None
 
 
     def element_volume(self, tet_vert):

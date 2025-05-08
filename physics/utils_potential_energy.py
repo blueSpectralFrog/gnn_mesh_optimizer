@@ -78,15 +78,67 @@ def compute_element_vol(element: jnp.ndarray, ref_coords: jnp.ndarray):
 def compute_def_gradient_element(element: jnp.ndarray, ref_coords: jnp.ndarray, cur_coords:jnp.ndarray, Jtransform = lambda J: J):
     """Compute deformation gradient of a tetrahedral element given specified reference and current positions"""
 
+    def _shape_function_gradients(gauss_point):
+        """
+        Compute gradients of shape functions in the natural coordinate system
+        at a given Gauss point (ξ, η, ζ).
+        """
+        ξ, η, ζ = gauss_point
+
+        # Derivatives of shape functions N1 to N8 with respect to ξ, η, ζ
+        dN_dxi = jnp.array([
+            [-(1 - η)*(1 - ζ), -(1 - ξ)*(1 - ζ), -(1 - ξ)*(1 - η)],
+            [ (1 - η)*(1 - ζ), -(1 + ξ)*(1 - ζ), -(1 + ξ)*(1 - η)],
+            [ (1 + η)*(1 - ζ),  (1 + ξ)*(1 - ζ), -(1 + ξ)*(1 + η)],
+            [-(1 + η)*(1 - ζ),  (1 - ξ)*(1 - ζ), -(1 - ξ)*(1 + η)],
+            [-(1 - η)*(1 + ζ), -(1 - ξ)*(1 + ζ),  (1 - ξ)*(1 - η)],
+            [ (1 - η)*(1 + ζ), -(1 + ξ)*(1 + ζ),  (1 + ξ)*(1 - η)],
+            [ (1 + η)*(1 + ζ),  (1 + ξ)*(1 + ζ),  (1 + ξ)*(1 + η)],
+            [-(1 + η)*(1 + ζ),  (1 - ξ)*(1 + ζ),  (1 - ξ)*(1 + η)],
+        ]) * 0.125
+
+        return dN_dxi  # Shape: (8, 3)
+
+    def _compute_deformation_gradient(X, x, gauss_point=(0, 0, 0)):
+        """
+        Compute deformation gradient F at a Gauss point.
+
+        Parameters:
+        - X: (8, 3) array of reference node coordinates
+        - x: (8, 3) array of deformed node coordinates
+        - gauss_point: tuple (ξ, η, ζ) in natural coordinates
+
+        Returns:
+        - F: (3, 3) deformation gradient matrix
+        """
+        dN_dxi = _shape_function_gradients(gauss_point)  # (8, 3)
+
+        # Jacobian in reference configuration
+        J0 = X.T @ dN_dxi  # (3, 3)
+        invJ0 = jnp.linalg.inv(J0)
+
+        # Gradients of shape functions in physical space
+        dN_dX = dN_dxi @ invJ0  # (8, 3)
+
+        # Deformation gradient F = sum(x_i ⊗ ∇N_i)
+        F = x.T @ dN_dX  # (3, 3)
+
+        return F
+
+    number_of_nodes = element.shape[-1]
+
     # extract reference and current coords of element
     node_0 = ref_coords[element]
     node_1 = cur_coords[element]
 
     # calculate the deformation gradient F as in Eq. (17) of the manuscript
-    node_0_centered = (node_0[1:] - node_0[0]).T
-    node_1_centered = (node_1[1:] - node_1[0]).T
-    F = jnp.matmul(node_1_centered, jnp.linalg.inv(node_0_centered))
-
+    if number_of_nodes == 4:
+        node_0_centered = (node_0[1:] - node_0[0]).T
+        node_1_centered = (node_1[1:] - node_1[0]).T
+        F = jnp.matmul(node_1_centered, jnp.linalg.inv(node_0_centered))    
+    elif number_of_nodes == 8:
+        F = _compute_deformation_gradient(node_0, node_1)
+    
     # J is simply the determinant of F
     J = jnp.linalg.det(F)
 
@@ -143,13 +195,13 @@ def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_ge
     """Compute total potential energy by evaluating Eq. (20) of the manuscript"""
 
     # current coords are simple reference coords + displacement
-    cur_coords = ref_geom_data.ref_coords + displacement
+    cur_coords = ref_geom_data.init_node_position + displacement
 
     # compute deformation gradient for each element in mesh
-    F, J = compute_def_gradient(ref_geom_data.elements, ref_geom_data.ref_coords, cur_coords, ref_geom_data.Jtransform)
+    F, J = compute_def_gradient(ref_geom_data.elements, ref_geom_data.init_node_position, cur_coords, ref_geom_data.Jtransform)
 
     # compute internal work done given specified constitutive law
-    Psi_internal = compute_internal_work(F, J, ref_geom_data.element_vols, ref_geom_data._fibre_field, theta, ref_geom_data.constitutive_law).sum()
+    Psi_internal = compute_internal_work(F, J, ref_geom_data.elements_vol, ref_geom_data._fibre_field, theta, ref_geom_data.constitutive_law).sum()
 
     # initialise external work to be zero
     Psi_external = 0.
