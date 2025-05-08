@@ -5,8 +5,11 @@ import optax
 import haiku as hk
 
 from functools import partial
+from absl import logging
 
 import numpy as np
+import pathlib
+import pickle
 
 import training.utils
 import data.utils_data as utils_data
@@ -23,7 +26,11 @@ def compute_loss_pinn(params, theta_tuple, pred_fn, ref_geom_data, external_forc
 
     theta_norm, theta = theta_tuple
     Upred = pred_fn(params, theta_norm)
+
+
+    ################# HEREREREREREREE #####################
     return total_potential_energy(Upred, theta, ref_geom_data, external_forces)
+    #######################################################
 
 def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     """Train emulator for one theta input point """
@@ -48,7 +55,7 @@ def predict_dataset(data_loader, pred_fn):
 class PhysicsLearner:
     """Class for training PI-GNN emulator and saving learned parameters"""
 
-    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_geom_data, external_forces, logging, results_save_dir = None, summary_writer=None):
+    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_geom_data, external_forces=None, logging=None, results_save_dir=None, summary_writer=None):
 
         self.train_dg = train_dg
         self.params = params
@@ -93,7 +100,7 @@ class PhysicsLearner:
     def fit_pinn(self, n_epochs: int, save_params = False, random_sampling=False):
         """Train network for 'n_epochs' epochs"""
 
-        self.logging.info(f'Beginning training for {n_epochs} epochs')
+        # self.logging.info(f'Beginning training for {n_epochs} epochs')
         for epoch_idx in range(n_epochs):
 
             # train network for one epoch
@@ -160,5 +167,18 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normali
     # zero out the weights in the last layer of the decoder FCNNs
     params = training.utils.gen_zero_params_gnn(emulator, params)
 
-    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom, external_forces, logging, results_save_dir, summary_writer)
+    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom,)
+    
+#########
+    # train first half at learning rate lr
+    n_epochs_start = max(emulator_config_dict['n_epochs']//2, 1)
+    learner.fit_pinn(n_epochs_start, save_params=True, random_sampling=False)
 
+    # finish training at learning rate lr/10
+    learner.update_learning_rate(emulator_config_dict['lr']/10.)
+    n_epochs_end = max(emulator_config_dict['n_epochs']-n_epochs_start, 1)
+    learner.fit_pinn(n_epochs_end, save_params=False, random_sampling=True) # randomly sample material parameters at each step
+
+    # save trained network params
+    with pathlib.Path(learner.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
+         pickle.dump(learner.params, fp)
