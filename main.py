@@ -39,6 +39,9 @@ if __name__ == "__main__":
         chosen_edge_data = chosen_edge_data.at[:, interval].set(ml.get_relative_distance_data(graph_inputs.node_position[:, interval, :],
                                                                 graph_inputs.edges[:,1],
                                                                 graph_inputs.edges[:,0]))
+    # normalize the edges:
+    chosen_edge_data = (chosen_edge_data-jnp.mean(chosen_edge_data, axis=0))/(jnp.std(chosen_edge_data, axis=0) + 1e-8)
+
     graph_inputs.add(chosen_edge_data=chosen_edge_data)
 
     config_path = f"./data/configs/{task}"

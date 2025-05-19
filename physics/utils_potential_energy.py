@@ -99,6 +99,21 @@ def compute_def_gradient_element(element: jnp.ndarray, ref_coords: jnp.ndarray, 
 
         return dN_dxi  # Shape: (8, 3)
 
+    # def _safe_inverse(J, tol=1e-8):
+
+    #     def inv_single(Ji):
+    #         U, S, Vh = jnp.linalg.svd(Ji)
+    #         S_inv = jnp.where(S > tol, 1.0 / S, 0.0)
+    #         return (Vh.T * S_inv) @ U.T
+    
+    #     return jax.vmap(inv_single)(J)
+    
+    def _safe_inverse(J, tol=1e-8):
+
+        U, S, Vh = jnp.linalg.svd(J)
+        S_inv = jnp.where(S > tol, 1.0 / S, 0.0)
+        return (Vh.T * S_inv) @ U.T
+
     def _compute_deformation_gradient(X, x, gauss_point=(0, 0, 0)):
         """
         Compute deformation gradient F at a Gauss point.
@@ -115,7 +130,7 @@ def compute_def_gradient_element(element: jnp.ndarray, ref_coords: jnp.ndarray, 
 
         # Jacobian in reference configuration
         J0 = X.T @ dN_dxi  # (3, 3)
-        invJ0 = jnp.linalg.inv(J0)
+        invJ0 = _safe_inverse(J0)
 
         # Gradients of shape functions in physical space
         dN_dX = dN_dxi @ invJ0  # (8, 3)

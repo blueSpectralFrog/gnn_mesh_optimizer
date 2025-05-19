@@ -4,6 +4,8 @@ from jax import jit
 import optax
 import haiku as hk
 
+import pdb
+
 from functools import partial
 from absl import logging
 
@@ -27,22 +29,19 @@ def compute_loss_pinn(params, theta_tuple, pred_fn, ref_geom_data, external_forc
     theta_norm, theta = theta_tuple
     Upred = pred_fn(params, theta_norm)
 
-
-    ################# HEREREREREREREE #####################
     return total_potential_energy(Upred, theta, ref_geom_data, external_forces)
-    #######################################################
 
 def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     """Train emulator for one theta input point """
 
     partial_loss_fn = partial(loss_fn, theta_tuple=theta_tuple)
-    grad_fn = jax.value_and_grad(partial_loss_fn)
 
-    ##################################
-    ##################################
-    ##################################
-    
+    grad_fn = jax.value_and_grad(partial_loss_fn)
     loss, grads = grad_fn(params)
+    
+    jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
+    jax.debug.print("Grad shape: {}", jax.tree_util.tree_map(lambda x: x.shape, grads))
+    
     updates, opt_state = optimiser.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
     return params, opt_state, loss
@@ -82,7 +81,7 @@ class PhysicsLearner:
                                      external_forces=external_forces)
 
         # jit the training step function for faster execution
-        self.train_step = jit(partial(train_step,
+        self.train_step = (partial(train_step,
                                       optimiser = self.optimiser,
                                       loss_fn = self.train_loss_fn))
 
