@@ -1,4 +1,4 @@
-jax 0.5.3
+jax==0.5.3
 jaxlib
 flax
 dm-haiku
