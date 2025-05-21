@@ -210,10 +210,10 @@ def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_ge
     """Compute total potential energy by evaluating Eq. (20) of the manuscript"""
 
     # current coords are simple reference coords + displacement
-    cur_coords = ref_geom_data.init_node_position + displacement
+    cur_coords = ref_geom_data.init_chosen_node_position + displacement
 
     # compute deformation gradient for each element in mesh
-    F, J = compute_def_gradient(ref_geom_data.elements, ref_geom_data.init_node_position, cur_coords, ref_geom_data.Jtransform)
+    F, J = compute_def_gradient(ref_geom_data.elements, ref_geom_data.init_chosen_node_position, cur_coords, ref_geom_data.Jtransform)
 
     # compute internal work done given specified constitutive law
     Psi_internal = compute_internal_work(F, J, ref_geom_data.elements_vol, ref_geom_data._fibre_field, theta, ref_geom_data.constitutive_law).sum()

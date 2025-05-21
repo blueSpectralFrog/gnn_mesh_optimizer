@@ -39,8 +39,8 @@ def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     grad_fn = jax.value_and_grad(partial_loss_fn)
     loss, grads = grad_fn(params)
     
-    jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
-    jax.debug.print("Grad shape: {}", jax.tree_util.tree_map(lambda x: x.shape, grads))
+    # jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
+    # jax.debug.print("Grad shape: {}", jax.tree_util.tree_map(lambda x: x.shape, grads))
     
     updates, opt_state = optimiser.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
@@ -100,6 +100,7 @@ class PhysicsLearner:
             loss += loss_idx
         # train loss for epoch is mean total potential energy
         self.train_loss = loss / self.train_dg.epoch_size
+        jax.debug.print(self.train_loss)
 
     def fit_pinn(self, n_epochs: int, save_params = False, random_sampling=False):
         """Train network for 'n_epochs' epochs"""
@@ -125,8 +126,8 @@ class PhysicsLearner:
                 self.summary_writer.scalar('train_loss', self.train_loss, epoch_idx_total)
                 self.summary_writer.scalar('learning_rate', self.opt_state.hyperparams["learning_rate"], epoch_idx_total)
 
-            if (epoch_idx % 250 == 0) or (epoch_idx < 150):
-                self.logging.info(f'({epoch_idx_total}): train_loss={self.train_loss:.5f}, lr={self.opt_state.hyperparams["learning_rate"]:.1e}')
+            # if (epoch_idx % 250 == 0) or (epoch_idx < 150):
+            #     self.logging.info(f'({epoch_idx_total}): train_loss={self.train_loss:.5f}, lr={self.opt_state.hyperparams["learning_rate"]:.1e}')
 
         # keep track of number of training epochs that have been performed for reference if training is restarted later
         self.offset_idx = self.n_epochs_trained

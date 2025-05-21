@@ -48,6 +48,10 @@ def isotropic_elastic(params, F, J, fibres=None):
 
     # Compute traces
     trace_eps = jnp.trace(C)
+
+    # transform to stop very large values:
+    trace_eps = I1_trans_fn(trace_eps)
+    
     eps_squared = jnp.dot(C, C)
     trace_eps_squared = jnp.trace(eps_squared)
 

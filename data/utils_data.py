@@ -123,17 +123,18 @@ class DataGenerator:
 
 class ReferenceGeometry:
     def __init__(self, graph_inputs):
-        self.init_node_position = graph_inputs.node_position[:,0,:][graph_inputs.chosen_nodes]
-        self._n_real_nodes, self._output_dim = self.init_node_position.shape
+        self.init_node_position = graph_inputs.node_position[:,0,:]
+        self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.chosen_nodes]
+        self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
 
-        self.elements = graph_inputs.chosen_cells
+        self.elements = graph_inputs.remapped_chosen_cells
 
         self.elements_vol = jnp.zeros(self.elements.shape[0])
         for index, element in enumerate(graph_inputs.chosen_cells):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
-                element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[[n_tet]]][0])
+                element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
         # TODO:
@@ -145,7 +146,7 @@ class ReferenceGeometry:
         # TODO:
         # Virtual nodes implementation? Need for larger meshes
 
-        self._output_dim = self.init_node_position.shape[-1]
+        self._output_dim = self.init_chosen_node_position.shape[-1]
 
         self._fibre_field = None
 

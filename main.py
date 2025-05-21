@@ -12,8 +12,8 @@ except ImportError:
 
 ################################################################################################
 # define globals
-data_directory = 'C:\\Users\\ndnde\\Documents\\Projects\\ML\\gnn_mesh_optimizer\\data\\data_dir'
-normalisation_statistics_dir = 'C:\\Users\\ndnde\\Documents\\Projects\\ML\\gnn_mesh_optimizer\\data'
+data_directory = '.\\data\\data_dir'
+normalisation_statistics_dir = '.\\data'
 task = 'squishy_512.yaml'
 train_size = 0.5
 ################################################################################################
@@ -26,10 +26,17 @@ if __name__ == "__main__":
     # Radius adjustable by user for propagation speed.
     train_cell_data, test_cell_data = utils_data.splitter(graph_inputs.mesh_connectivity, train_size)
     graph_inputs.add(chosen_cells=train_cell_data, chosen_nodes=jnp.unique(jnp.hstack(train_cell_data)))
-    # graph_inputs.add(chosen_theta=graph_inputs.theta[graph_inputs.chosen_nodes])
+    
+    # Create a remapping array
+    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
+    remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
+
+    # Apply the remap
+    remapped_chosen_cells = remap[graph_inputs.chosen_cells]
+    graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
 
     # readjust the senders/receivers in graph inputs to account for train/test split:
-    graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.chosen_cells, graph_inputs.cell_type)
+    graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.remapped_chosen_cells, graph_inputs.cell_type)
     
     # select the edge data based on chosen cells ONLY
     chosen_edge_data = jnp.zeros((graph_inputs.edges.shape[0], 
