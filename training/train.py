@@ -81,9 +81,10 @@ class PhysicsLearner:
                                      external_forces=external_forces)
 
         # jit the training step function for faster execution
-        self.train_step = (partial(train_step,
+        self.train_step = jit(partial(train_step,
                                       optimiser = self.optimiser,
                                       loss_fn = self.train_loss_fn))
+
 
     def train_epoch(self, random_sampling=False):
         """Train network for one epoch"""
@@ -100,7 +101,7 @@ class PhysicsLearner:
             loss += loss_idx
         # train loss for epoch is mean total potential energy
         self.train_loss = loss / self.train_dg.epoch_size
-        jax.debug.print(self.train_loss)
+        print(f'loss: {self.train_loss}')
 
     def fit_pinn(self, n_epochs: int, save_params = False, random_sampling=False):
         """Train network for 'n_epochs' epochs"""
@@ -108,6 +109,7 @@ class PhysicsLearner:
         # self.logging.info(f'Beginning training for {n_epochs} epochs')
         for epoch_idx in range(n_epochs):
 
+            print(f'epoch: {epoch_idx}')
             # train network for one epoch
             self.train_epoch(random_sampling)
 
@@ -173,7 +175,7 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normali
     # zero out the weights in the last layer of the decoder FCNNs
     params = training.utils.gen_zero_params_gnn(emulator, params)
     
-    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom, external_forces)
+    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom, external_forces, results_save_dir='./data')
     
     # train first half at learning rate lr
     n_epochs_start = max(emulator_config_dict['n_epochs']//2, 1)
@@ -187,3 +189,95 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normali
     # save trained network params
     with pathlib.Path(learner.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
          pickle.dump(learner.params, fp)
+
+def run_evaluation(data_path: str, K: int, n_epochs: int, lr: float, trained_params_dir: str, dir_label: str):
+    """Evaluate performance of a trained a PI-GNN emulator on simulation data"""
+
+    # directory where results are saved
+    results_save_dir = create_savedir(data_path, K, n_epochs, lr, dir_label)
+
+    logging.get_absl_handler().use_absl_log_file('evaluation', f'{results_save_dir}/logFiles')
+    logging.set_stderrthreshold(logging.DEBUG)
+
+    logging.info('Beginning Evaluation')
+    logging.info(f'Data path: {data_path}')
+    logging.info(f'Message passing steps (K): {K}')
+    logging.info(f'Training epochs: {n_epochs}')
+    logging.info(f'Learning rate: {lr}')
+    logging.info(f'Trained Params Dir: {trained_params_dir}\n')
+    logging.info(f'Results save directory: {results_save_dir}\n')
+
+    # load reference geometry data
+    ref_geom = utils_data.ReferenceGeometry(data_path)
+
+    # store external force data (body forces and/or surface forces)
+    external_forces = utils_data.ExternalForces(data_path)
+
+    # load test simulation data
+    test_data = utils_data.DataLoader(data_path, 'test')
+    logging.info(f'Number of test data points: {test_data._data_size}')
+
+    # create dictionary of hyperparameters of the GNN emulator
+    config_dict = create_config_dict(K, n_epochs, lr, ref_geom._output_dim)
+
+    # if trained_params_dir is not set, parameters are read from results_save_dir
+    if trained_params_dir == "None": trained_params_dir = results_save_dir
+
+    # initialise GNN emulator and read trained network parameters
+    pred_fn, trained_params, emulator = utils.initialise_emulator(config_dict, test_data, results_save_dir, ref_geom, True, trained_params_dir)
+
+    # vmap to allow total potential energy to be computed for all simulations similtaneously
+    pe_vmap = jax.vmap(partial(total_potential_energy, ref_geom_data=ref_geom, external_forces=external_forces))
+
+    # hardcode trained parameters into prediction function and jit for faster execution
+    pred_fn_jit = jit(lambda theta_norm: pred_fn(trained_params, theta_norm))
+
+    logging.info('Predicting on test data set using trained emulator')
+    Upred = predict_dataset(test_data, pred_fn_jit)
+
+    # calculate total potential energy for test data using emulator prediction
+    PEpred = pe_vmap(Upred,test_data._theta)
+
+    # retrieve the corresponding values obtained using the finite-element simulator
+    Utrue = test_data._displacement
+    PEtrue = test_data._pe_values
+
+    # find error between total potential energy calculated in JAX versus results returned by FEniCS (PEtrue)
+    PEtrue_calc = pe_vmap(Utrue,test_data._theta)
+    calc_errors = 100.*jnp.abs((PEtrue - PEtrue_calc)/PEtrue)
+    logging.info(f'Max PE calc error against FEniCS: {calc_errors.max():.4f}% (sim {calc_errors.argmax()})\n')
+
+    # compute deformation gradient and potential energy from true displacements
+    Ftrue, Jtrue, I1true = utils_eval.compute_F_J_I1_vmap(Utrue, ref_geom)
+
+    # compute deformation gradient and potential energy from predicted displacements
+    Fpred, Jpred, I1pred = utils_eval.compute_F_J_I1_vmap(Upred, ref_geom)
+
+    # collect true/predicted arrays into tuples
+    true_arrs = Utrue, PEtrue, Ftrue, Jtrue, I1true
+    pred_arrs = Upred, PEpred, Fpred, Jpred, I1pred
+
+    # print prediction error statistics to console
+    utils_eval.print_error_statistics(true_arrs, pred_arrs, results_save_dir, logging)
+
+    if SAVE_PREDICTIONS:
+        logging.info('Saving Results')
+        np.save(f'{results_save_dir}/predDisplacement.npy', Upred)
+        np.save(f'{results_save_dir}/trueDisplacement.npy', Utrue)
+
+    # make Paraview (.vtk) and Augmented Reality (.ply) visualisations of results
+    try:
+        import paraview.simple
+    except:
+        logging.warning('3D visualisations cannot be generated, as there was en error in importing paraview. Try typing "from paraview.simple import *" in a Python shell and follow the error printed to the screen.')
+        return
+
+    from utils_visualisation import make_3D_visualisations as make_visuals
+    logging.info('Generating 3D visualisation files')
+    make_visuals(Utrue, Upred, ref_geom.ref_coords, data_path, results_save_dir, logging)
+
+
+# store trainig and evaluation functions in dictionary for access in "main.py"
+run_fns_dict = {'train': [train],
+                'evaluate': [evaluate],
+                'train_and_evaluate': [train, evaluate]}

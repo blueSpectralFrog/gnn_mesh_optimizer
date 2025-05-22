@@ -1,4 +1,4 @@
-from training.train import run_training
+from training.train import run_training, run_evaluation
 import data.utils_data as utils_data
 import data.mesh_loader as ml
 import jax.numpy as jnp
@@ -12,14 +12,15 @@ except ImportError:
 
 ################################################################################################
 # define globals
-data_directory = '.\\data\\data_dir'
-normalisation_statistics_dir = '.\\data'
+data_directory = './data/data_dir'
+normalisation_statistics_dir = './data'
 task = 'squishy_512.yaml'
 train_size = 0.5
 ################################################################################################
 
 if __name__ == "__main__":
 
+    ### TRAIN ###
     graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
 
     # Could also consider using nearest neighbors to find close nodes instead of splitting by element? 
@@ -56,4 +57,7 @@ if __name__ == "__main__":
     
     run_training(config_dict, graph_inputs, data_directory, normalisation_statistics_dir)
 
-    graph_inputs.cell_data=test_cell_data
+    ### EVALUATE ###
+
+    run_evaluation(data_path: str, K: int, n_epochs: int, lr: float, trained_params_dir: str, dir_label: str)
+
