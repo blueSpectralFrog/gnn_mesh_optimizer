@@ -23,6 +23,13 @@ OPTIMISATION_ALGORITHM = optax.adam
 
 #################################################################
 
+# function to create subdir to save emulation results
+# create_savedir = partial(utils.create_savedir,
+#                                    local_embedding_dim=LOCAL_EMBED_DIM,
+#                                    mlp_width=MLP_WIDTH,
+#                                    mlp_depth=MLP_DEPTH,
+#                                    rng_seed=RNG_SEED)
+
 def compute_loss_pinn(params, theta_tuple, pred_fn, ref_geom_data, external_forces):
     """Compute total potential energy from emulator prediction"""
 
@@ -190,35 +197,35 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normali
     with pathlib.Path(learner.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
          pickle.dump(learner.params, fp)
 
-def run_evaluation(data_path: str, K: int, n_epochs: int, lr: float, trained_params_dir: str, dir_label: str):
+def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: float, trained_params_dir: str, dir_label: str):
     """Evaluate performance of a trained a PI-GNN emulator on simulation data"""
 
     # directory where results are saved
-    results_save_dir = create_savedir(data_path, K, n_epochs, lr, dir_label)
+    results_save_dir = 'C:/Users/ndnde/Documents/Projects/ML/gnn_mesh_optimizer/emulation' #create_savedir(data_path, K, n_epochs, lr, dir_label)
 
-    logging.get_absl_handler().use_absl_log_file('evaluation', f'{results_save_dir}/logFiles')
-    logging.set_stderrthreshold(logging.DEBUG)
+    # logging.get_absl_handler().use_absl_log_file('evaluation', f'{results_save_dir}/logFiles')
+    # logging.set_stderrthreshold(logging.DEBUG)
 
     logging.info('Beginning Evaluation')
     logging.info(f'Data path: {data_path}')
     logging.info(f'Message passing steps (K): {K}')
     logging.info(f'Training epochs: {n_epochs}')
     logging.info(f'Learning rate: {lr}')
-    logging.info(f'Trained Params Dir: {trained_params_dir}\n')
+    logging.info(f'Trained Params Dir: {trained_params_dir}/n')
     logging.info(f'Results save directory: {results_save_dir}\n')
 
     # load reference geometry data
-    ref_geom = utils_data.ReferenceGeometry(data_path)
+    ref_geom = utils_data.ReferenceGeometry(graph_inputs)
 
     # store external force data (body forces and/or surface forces)
-    external_forces = utils_data.ExternalForces(data_path)
+    external_forces = utils_data.ExtForceTemp()
 
     # load test simulation data
-    test_data = utils_data.DataLoader(data_path, 'test')
-    logging.info(f'Number of test data points: {test_data._data_size}')
+    # test_data = utils_data.DataLoader(data_path, 'test') -> replaced by ml.extract_graph_inputs which already gets node data
+    logging.info(f'Number of test data points: {graph_inputs.chosen_node_data.shape[0]}')
 
     # create dictionary of hyperparameters of the GNN emulator
-    config_dict = create_config_dict(K, n_epochs, lr, ref_geom._output_dim)
+    config_dict = training.utils.create_config_dict(K, n_epochs, lr, ref_geom._output_dim)
 
     # if trained_params_dir is not set, parameters are read from results_save_dir
     if trained_params_dir == "None": trained_params_dir = results_save_dir
@@ -275,9 +282,3 @@ def run_evaluation(data_path: str, K: int, n_epochs: int, lr: float, trained_par
     from utils_visualisation import make_3D_visualisations as make_visuals
     logging.info('Generating 3D visualisation files')
     make_visuals(Utrue, Upred, ref_geom.ref_coords, data_path, results_save_dir, logging)
-
-
-# store trainig and evaluation functions in dictionary for access in "main.py"
-run_fns_dict = {'train': [train],
-                'evaluate': [evaluate],
-                'train_and_evaluate': [train, evaluate]}

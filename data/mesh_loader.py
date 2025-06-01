@@ -31,8 +31,8 @@ def read_data(data_dir):
         
         # split into node and cell data
         node_position[file_number] = mesh.points
-        node_data[file_number] = mesh.point_data    # NOT NEEDED
-        cell_data[file_number] = mesh.cell_data     # NOT NEEDED
+        node_data[file_number] = mesh.point_data    # NEEDED ONLY FOR EVAL
+        cell_data[file_number] = mesh.cell_data     # NEEDED ONLY FOR EVAL
         
         # cell connectivity
         mesh_connectivity = mesh.cells_dict[mesh.cells[0].type]

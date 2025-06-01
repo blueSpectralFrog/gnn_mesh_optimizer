@@ -12,7 +12,7 @@ except ImportError:
 
 ################################################################################################
 # define globals
-data_directory = './data/data_dir'
+data_directory = './data/data_dir/squishy_512_hex'
 normalisation_statistics_dir = './data'
 task = 'squishy_512.yaml'
 train_size = 0.5
@@ -20,24 +20,23 @@ train_size = 0.5
 
 if __name__ == "__main__":
 
-    ### TRAIN ###
+    #################################
+    # TRAIN 
+    #################################
     graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
 
-    # Could also consider using nearest neighbors to find close nodes instead of splitting by element? 
-    # Radius adjustable by user for propagation speed.
-    train_cell_data, test_cell_data = utils_data.splitter(graph_inputs.mesh_connectivity, train_size)
-    graph_inputs.add(chosen_cells=train_cell_data, chosen_nodes=jnp.unique(jnp.hstack(train_cell_data)))
-    
-    # Create a remapping array
-    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
-    remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
+    graph_inputs = utils_data.splitter(graph_inputs, train_size)
 
-    # Apply the remap
-    remapped_chosen_cells = remap[graph_inputs.chosen_cells]
-    graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
+    # # Create a remapping array
+    # remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
+    # remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
+
+    # # Apply the remap
+    # remapped_chosen_cells = remap[graph_inputs.chosen_cells]
+    # graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
 
     # readjust the senders/receivers in graph inputs to account for train/test split:
-    graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.remapped_chosen_cells, graph_inputs.cell_type)
+    graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.train_cell_data, graph_inputs.cell_type)
     
     # select the edge data based on chosen cells ONLY
     chosen_edge_data = jnp.zeros((graph_inputs.edges.shape[0], 
@@ -57,7 +56,18 @@ if __name__ == "__main__":
     
     run_training(config_dict, graph_inputs, data_directory, normalisation_statistics_dir)
 
-    ### EVALUATE ###
+    #################################
+    # EVALUATE 
+    #################################
+    graph_inputs.add(chosen_cells=test_cell_data, chosen_nodes=jnp.unique(jnp.hstack(test_cell_data)))
 
-    run_evaluation(data_path: str, K: int, n_epochs: int, lr: float, trained_params_dir: str, dir_label: str)
+    # Create a remapping array
+    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
+    remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
+
+    # Apply the remap
+    remapped_chosen_cells = remap[graph_inputs.chosen_cells]
+    graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
+    
+    run_evaluation(graph_inputs, 'squishy_512', config_dict['K'], config_dict['n_epochs'], config_dict['lr'], data_directory, '')
 

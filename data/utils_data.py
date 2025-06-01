@@ -7,7 +7,7 @@ import numpy as np
 from scipy.stats.qmc import LatinHypercube, scale as qmc_scale
 
 EDGE_PATTERNS = {
-    "tetrahedron": [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)],
+    "tetra": [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)],
     "hexahedron": [(0, 1), (1, 2), (2, 3), (3, 0),  # Bottom face
              (4, 5), (5, 6), (6, 7), (7, 4),  # Top face
              (0, 4), (1, 5), (2, 6), (3, 7)],  # Vertical edges
@@ -124,13 +124,13 @@ class DataGenerator:
 class ReferenceGeometry:
     def __init__(self, graph_inputs):
         self.init_node_position = graph_inputs.node_position[:,0,:]
-        self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.chosen_nodes]
+        self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.nodes_unique_to_training]
         self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
 
-        self.elements = graph_inputs.remapped_chosen_cells
+        self.elements = graph_inputs.train_cell_data
 
         self.elements_vol = jnp.zeros(self.elements.shape[0])
-        for index, element in enumerate(graph_inputs.chosen_cells):
+        for index, element in enumerate(graph_inputs.train_cell_data):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
@@ -172,22 +172,72 @@ class ReferenceGeometry:
 
         return _tetrahedron_calc_volume(tet_vert)
 
-def splitter(element_data, train_size=0.8, rng_key=None):
+def splitter(graph_inputs, train_size=0.8, rng_key=None):
     """
     Split input data into train and test data
     """
+
+    def find_unique_or_union_nodes(arr1, arr2, unique=True):
+        """
+        Finds nodes unique to arr1 compared to arr2.
+
+        Args:
+            arr1: The first JAX array.
+            arr2: The second JAX array.
+
+        Returns:
+            A new JAX array containing nodes unique to arr1.
+        """
+        if unique:
+            arr1 = jnp.unique(arr1)
+            is_unique = ~jnp.isin(arr1, arr2) #~ for not in
+            return arr1[is_unique]
+        else:
+            return arr1[jnp.isin(arr1, arr2)]
+        
+    element_data = graph_inputs.mesh_connectivity
+    
     if rng_key is None:
         rng_key = jax.random.PRNGKey(0)
         
-    n = element_data.shape[0]
-    indices = jnp.arange(n)
+    n_elems = element_data.shape[0]
+    n_nodes = len(jnp.unique(element_data.reshape(-1)))
+
+    indices = jnp.arange(n_elems)
     shuffled_indices = jax.random.permutation(rng_key, indices)
 
-    split_idx = int(n * train_size)
+    split_idx = int(n_elems * train_size)
     train_idx = shuffled_indices[:split_idx]
     test_idx = shuffled_indices[split_idx:]
 
-    return element_data[train_idx], element_data[test_idx]
+    nodes_in_training_elements = jnp.unique(element_data[train_idx].reshape(-1))
+    nodes_in_testing_elements = jnp.unique(element_data[test_idx].reshape(-1))
+
+    nodes_unique_to_training = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements)
+    node_training_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_training].set(True)
+
+    nodes_unique_to_testing = find_unique_or_union_nodes(nodes_in_testing_elements, nodes_in_training_elements)
+    node_testing_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_testing].set(True)
+
+    nodes_on_boundary = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements, unique=False)
+    node_boundary_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_on_boundary].set(True)
+
+    # for elem_idx, element in enumerate(element_data):
+    #     if set(element).issubset(train_set):
+    #         train_cells.append(elem_idx)
+    #     elif set(element).issubset(test_set):
+    #         test_cells.append(elem_idx)
+
+    graph_inputs.add(train_cell_data=element_data[train_idx], 
+                     test_cell_data=element_data[test_idx], 
+                     nodes_unique_to_training=nodes_unique_to_training, 
+                     node_training_mask=node_training_mask,
+                     nodes_unique_to_testing=nodes_unique_to_testing, 
+                     node_testing_mask=node_testing_mask,
+                     nodes_on_boundary=nodes_on_boundary,
+                     node_boundary_mask=node_boundary_mask)
+
+    return graph_inputs
 
 def cells_to_edges(cells, cellConnectivity):
 
