@@ -3,6 +3,8 @@ import jax
 import jax.numpy as jnp
 from jax import device_put, random
 import numpy as np
+import networkx as nx
+from networkx.algorithms.community import kernighan_lin_bisection
 
 from scipy.stats.qmc import LatinHypercube, scale as qmc_scale
 
@@ -136,9 +138,7 @@ class ReferenceGeometry:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
                 element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
-
-        # TODO:
-        # need constitutive law insertion here 
+ 
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
@@ -176,7 +176,45 @@ def splitter(graph_inputs, train_size=0.8, rng_key=None):
     """
     Split input data into train and test data
     """
+    def recursive_kl_partition(G, train_ratio=0.8):
+        total_nodes = len(G)
+        desired_train_size = int(train_ratio * total_nodes)
+        train_nodes = set()
+        remaining_subgraphs = [G]
 
+        while remaining_subgraphs and len(train_nodes) < desired_train_size:
+            # Pop the largest remaining subgraph
+            subgraph = max(remaining_subgraphs, key=lambda g: len(g))
+            remaining_subgraphs.remove(subgraph)
+
+            # Split it using KL
+            try:
+                part_a, part_b = kernighan_lin_bisection(subgraph)
+            except nx.NetworkXError:
+                # If the graph is too small to bisect, just add all its nodes
+                part_a = list(subgraph.nodes)
+                part_b = []
+
+            # Decide which side to add to the train set
+            if len(train_nodes) + len(part_a) <= desired_train_size:
+                train_nodes.update(part_a)
+                if part_b:
+                    remaining_subgraphs.append(subgraph.subgraph(part_b).copy())
+            elif len(train_nodes) + len(part_b) <= desired_train_size:
+                train_nodes.update(part_b)
+                if part_a:
+                    remaining_subgraphs.append(subgraph.subgraph(part_a).copy())
+            else:
+                # If adding either side would overshoot, add the smaller one
+                smaller = part_a if len(part_a) < len(part_b) else part_b
+                train_nodes.update(smaller)
+
+        # Anything not in train becomes test
+        all_nodes = set(G.nodes)
+        test_nodes = all_nodes - train_nodes
+
+        return train_nodes, test_nodes
+    
     def find_unique_or_union_nodes(arr1, arr2, unique=True):
         """
         Finds nodes unique to arr1 compared to arr2.
@@ -200,42 +238,24 @@ def splitter(graph_inputs, train_size=0.8, rng_key=None):
     if rng_key is None:
         rng_key = jax.random.PRNGKey(0)
         
-    n_elems = element_data.shape[0]
-    n_nodes = len(jnp.unique(element_data.reshape(-1)))
+    G = nx.Graph()
 
-    indices = jnp.arange(n_elems)
-    shuffled_indices = jax.random.permutation(rng_key, indices)
+    for edge in graph_inputs.edges.tolist():
+        G.add_edge(edge[0], edge[1])
 
-    split_idx = int(n_elems * train_size)
-    train_idx = shuffled_indices[:split_idx]
-    test_idx = shuffled_indices[split_idx:]
+    nodes_train, nodes_test = recursive_kl_partition(G)
 
-    nodes_in_training_elements = jnp.unique(element_data[train_idx].reshape(-1))
-    nodes_in_testing_elements = jnp.unique(element_data[test_idx].reshape(-1))
-
-    nodes_unique_to_training = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements)
-    node_training_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_training].set(True)
-
-    nodes_unique_to_testing = find_unique_or_union_nodes(nodes_in_testing_elements, nodes_in_training_elements)
-    node_testing_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_testing].set(True)
-
-    nodes_on_boundary = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements, unique=False)
-    node_boundary_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_on_boundary].set(True)
-
-    # for elem_idx, element in enumerate(element_data):
-    #     if set(element).issubset(train_set):
-    #         train_cells.append(elem_idx)
-    #     elif set(element).issubset(test_set):
-    #         test_cells.append(elem_idx)
-
-    graph_inputs.add(train_cell_data=element_data[train_idx], 
-                     test_cell_data=element_data[test_idx], 
-                     nodes_unique_to_training=nodes_unique_to_training, 
-                     node_training_mask=node_training_mask,
-                     nodes_unique_to_testing=nodes_unique_to_testing, 
-                     node_testing_mask=node_testing_mask,
-                     nodes_on_boundary=nodes_on_boundary,
-                     node_boundary_mask=node_boundary_mask)
+    def filter_elements(elements, allowed_nodes):
+        allowed_set = set(allowed_nodes)
+        return [elem for elem in elements if all(n in allowed_set for n in elem)]
+    
+    train_elements = filter_elements(graph_inputs.mesh_connectivity, nodes_train)
+    test_elements = filter_elements(graph_inputs.mesh_connectivity, nodes_test)
+    
+    graph_inputs.add(train_cell_data=jnp.vstack(train_elements), 
+                     test_cell_data=jnp.vstack(test_elements), 
+                     nodes_unique_to_training=jnp.array(list(nodes_train)), 
+                     nodes_unique_to_testing=jnp.array(list(nodes_test)))
 
     return graph_inputs
 
