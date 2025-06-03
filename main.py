@@ -27,13 +27,13 @@ if __name__ == "__main__":
 
     graph_inputs = utils_data.splitter(graph_inputs, train_size)
 
-    # # Create a remapping array
-    # remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
-    # remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
+    # Create a remapping array
+    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
+    remap = remap.at[graph_inputs.nodes_unique_to_training].set(jnp.arange(len(graph_inputs.nodes_unique_to_training)))
 
-    # # Apply the remap
-    # remapped_chosen_cells = remap[graph_inputs.chosen_cells]
-    # graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
+    # Apply the remap
+    remapped_train_cell_data = remap[graph_inputs.train_cell_data]
+    graph_inputs.add(remapped_train_cell_data=remapped_train_cell_data)
 
     # readjust the senders/receivers in graph inputs to account for train/test split:
     graph_inputs.edges = utils_data.cells_to_edges(graph_inputs.train_cell_data, graph_inputs.cell_type)
@@ -48,7 +48,6 @@ if __name__ == "__main__":
                                                                 graph_inputs.edges[:,0]))
     # normalize the edges:
     chosen_edge_data = (chosen_edge_data-jnp.mean(chosen_edge_data, axis=0))/(jnp.std(chosen_edge_data, axis=0) + 1e-8)
-
     graph_inputs.add(chosen_edge_data=chosen_edge_data)
 
     config_path = f"./data/configs/{task}"
@@ -66,8 +65,8 @@ if __name__ == "__main__":
     remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
 
     # Apply the remap
-    remapped_chosen_cells = remap[graph_inputs.chosen_cells]
-    graph_inputs.add(remapped_chosen_cells=remapped_chosen_cells)
+    remapped_train_cell_data = remap[graph_inputs.chosen_cells]
+    graph_inputs.add(remapped_train_cell_data=remapped_train_cell_data)
     
     run_evaluation(graph_inputs, 'squishy_512', config_dict['K'], config_dict['n_epochs'], config_dict['lr'], data_directory, '')
 

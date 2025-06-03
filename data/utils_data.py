@@ -129,16 +129,18 @@ class ReferenceGeometry:
         self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.nodes_unique_to_training]
         self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
 
-        self.elements = graph_inputs.train_cell_data
+        self.elements = graph_inputs.remapped_train_cell_data
 
         self.elements_vol = jnp.zeros(self.elements.shape[0])
-        for index, element in enumerate(graph_inputs.train_cell_data):
+        for index, element in enumerate(graph_inputs.remapped_train_cell_data):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
                 element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
- 
+
+        # TODO:
+        # need constitutive law insertion here 
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
@@ -234,6 +236,7 @@ def splitter(graph_inputs, train_size=0.8, rng_key=None):
             return arr1[jnp.isin(arr1, arr2)]
         
     element_data = graph_inputs.mesh_connectivity
+    n_nodes = len(jnp.unique(element_data.reshape(-1)))
     
     if rng_key is None:
         rng_key = jax.random.PRNGKey(0)
@@ -245,6 +248,9 @@ def splitter(graph_inputs, train_size=0.8, rng_key=None):
 
     nodes_train, nodes_test = recursive_kl_partition(G)
 
+    nodes_train_mask = jnp.zeros(n_nodes, dtype=bool).at[jnp.array(list(nodes_train))].set(True)
+    nodes_test_mask = jnp.zeros(n_nodes, dtype=bool).at[jnp.array(list(nodes_test))].set(True)
+
     def filter_elements(elements, allowed_nodes):
         allowed_set = set(allowed_nodes)
         return [elem for elem in elements if all(n in allowed_set for n in elem)]
@@ -252,10 +258,49 @@ def splitter(graph_inputs, train_size=0.8, rng_key=None):
     train_elements = filter_elements(graph_inputs.mesh_connectivity, nodes_train)
     test_elements = filter_elements(graph_inputs.mesh_connectivity, nodes_test)
     
+    # n_elems = element_data.shape[0]
+    # n_nodes = len(jnp.unique(element_data.reshape(-1)))
+
+    # indices = jnp.arange(n_elems)
+    # shuffled_indices = jax.random.permutation(rng_key, indices)
+
+    # split_idx = int(n_elems * train_size)
+    # train_idx = shuffled_indices[:split_idx]
+    # test_idx = shuffled_indices[split_idx:]
+
+    # nodes_in_training_elements = jnp.unique(element_data[train_idx].reshape(-1))
+    # nodes_in_testing_elements = jnp.unique(element_data[test_idx].reshape(-1))
+
+    # nodes_unique_to_training = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements)
+    # node_training_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_training].set(True)
+
+    # nodes_unique_to_testing = find_unique_or_union_nodes(nodes_in_testing_elements, nodes_in_training_elements)
+    # node_testing_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_unique_to_testing].set(True)
+
+    # nodes_on_boundary = find_unique_or_union_nodes(nodes_in_training_elements, nodes_in_testing_elements, unique=False)
+    # node_boundary_mask = jnp.zeros(n_nodes, dtype=bool).at[nodes_on_boundary].set(True)
+
+    # for elem_idx, element in enumerate(element_data):
+    #     if set(element).issubset(train_set):
+    #         train_cells.append(elem_idx)
+    #     elif set(element).issubset(test_set):
+    #         test_cells.append(elem_idx)
+
+    # graph_inputs.add(train_cell_data=element_data[train_idx], 
+    #                  test_cell_data=element_data[test_idx], 
+    #                  nodes_unique_to_training=nodes_unique_to_training, 
+    #                  node_training_mask=node_training_mask,
+    #                  nodes_unique_to_testing=nodes_unique_to_testing, 
+    #                  node_testing_mask=node_testing_mask,
+    #                  nodes_on_boundary=nodes_on_boundary,
+    #                  node_boundary_mask=node_boundary_mask)
+    
     graph_inputs.add(train_cell_data=jnp.vstack(train_elements), 
                      test_cell_data=jnp.vstack(test_elements), 
                      nodes_unique_to_training=jnp.array(list(nodes_train)), 
-                     nodes_unique_to_testing=jnp.array(list(nodes_test)))
+                     nodes_train_mask=nodes_train_mask,
+                     nodes_unique_to_testing=jnp.array(list(nodes_test)),
+                     nodes_test_mask=nodes_test_mask)
 
     return graph_inputs
 
