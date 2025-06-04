@@ -175,7 +175,7 @@ def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normali
     emulator_config_dict['output_dim'] = ref_geom._output_dim
 
     train_dg = utils_data.DataGenerator(normalisation_statistics_dir)
-    external_forces = utils_data.ExtForceTemp()
+    external_forces = utils_data.ExtForceTemp(graph_inputs)
 
     emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, train_dg, ref_geom)
 

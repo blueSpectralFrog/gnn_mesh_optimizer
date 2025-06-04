@@ -5,6 +5,8 @@ import numpy as np
 import jax.numpy as jnp
 import os
 import data.utils_data as utils_data
+import xml.etree.ElementTree as ET
+import xmltodict
 
 class GraphInputs:
         def __init__(self, **kwargs):
@@ -15,7 +17,21 @@ class GraphInputs:
             for name, value in kwargs.items():
                 setattr(self, name, value)
 
-def read_data(data_dir):
+def read_model_data(data_dir):
+
+    file = sorted([os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.feb')])
+    tree = ET.parse(file[-1])
+    root = tree.getroot()
+
+    nodes = []
+    node_id_map = {}
+
+    with open(file[-1], "r") as f:
+        data_dict = xmltodict.parse(f.read())
+
+    return data_dict
+
+def read_simulation_data(data_dir):
 
     # find all .vtk files in directory
     files = sorted([os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.vtk')])
@@ -31,8 +47,8 @@ def read_data(data_dir):
         
         # split into node and cell data
         node_position[file_number] = mesh.points
-        node_data[file_number] = mesh.point_data    # NEEDED ONLY FOR EVAL
-        cell_data[file_number] = mesh.cell_data     # NEEDED ONLY FOR EVAL
+        node_data[file_number] = mesh.point_data
+        cell_data[file_number] = mesh.cell_data
         
         # cell connectivity
         mesh_connectivity = mesh.cells_dict[mesh.cells[0].type]
@@ -98,11 +114,13 @@ def identify_dirichlet_boundary(node_displacement):
 
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    node_position, node_data_dict, edge_sim_data, cell_data, mesh_connectivity, cell_type, edges = read_data(data_dir)
+    _, _, face_sets = read_model_data(data_dir)
+    node_position, node_data_dict, edge_sim_data, cell_data, mesh_connectivity, cell_type, edges = read_simulation_data(data_dir)
+
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label) # displacement data
     node_position = stack_simulation_data(node_position, None) # node position data
 
     dirichlet_boundary_nodes = identify_dirichlet_boundary(node_data) # vertice data, not including fibre information
 
     return GraphInputs(vertex_data=dirichlet_boundary_nodes, node_position=node_position, node_data=node_data, edge_sim_data=edge_sim_data, cell_data=cell_data,
-                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges)
+                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges, face_sets=face_sets)

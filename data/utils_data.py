@@ -27,9 +27,12 @@ ELEMENT_VOLUME_BKDOWN = {
 }
 
 class ExtForceTemp:
-    def __init__(self):
+    def __init__(self, graph_inputs):
+
+        if graph_inputs.face_sets:
+            self.surface_force = graph_inputs.face_sets['Force1']
+
         self.body_force = None
-        self.surface_force = None
         
 class DataGenerator:
     """Class for generating input theta data points at which the PI-GNN emulator is trained"""
