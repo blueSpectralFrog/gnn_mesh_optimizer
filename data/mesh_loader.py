@@ -23,13 +23,18 @@ def read_model_data(data_dir):
     tree = ET.parse(file[-1])
     root = tree.getroot()
 
-    nodes = []
-    node_id_map = {}
-
     with open(file[-1], "r") as f:
         data_dict = xmltodict.parse(f.read())
 
-    return data_dict
+    bc_constraint = [list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Surface'][0]['quad4']]
+    bc_constraint = jnp.vstack(bc_constraint)
+
+    bc_force = [list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Surface'][1]['quad4']]
+    bc_force = jnp.vstack(bc_force)
+
+    bc_force_magnitude = list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(',')))
+
+    return bc_constraint, bc_force, bc_force_magnitude
 
 def read_simulation_data(data_dir):
 
@@ -114,7 +119,7 @@ def identify_dirichlet_boundary(node_displacement):
 
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    _, _, face_sets = read_model_data(data_dir)
+    bc_constraint, bc_force, bc_force_magnitude = read_model_data(data_dir)
     node_position, node_data_dict, edge_sim_data, cell_data, mesh_connectivity, cell_type, edges = read_simulation_data(data_dir)
 
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label) # displacement data
@@ -123,4 +128,5 @@ def extract_graph_inputs(data_dir, sim_output_data_label):
     dirichlet_boundary_nodes = identify_dirichlet_boundary(node_data) # vertice data, not including fibre information
 
     return GraphInputs(vertex_data=dirichlet_boundary_nodes, node_position=node_position, node_data=node_data, edge_sim_data=edge_sim_data, cell_data=cell_data,
-                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges, face_sets=face_sets)
+                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges, bc_constraint=bc_constraint,
+                        bc_force=bc_force, bc_force_magnitude=bc_force_magnitude)

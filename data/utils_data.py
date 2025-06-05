@@ -29,8 +29,9 @@ ELEMENT_VOLUME_BKDOWN = {
 class ExtForceTemp:
     def __init__(self, graph_inputs):
 
-        if graph_inputs.face_sets:
-            self.surface_force = graph_inputs.face_sets['Force1']
+        if graph_inputs.bc_force:
+            self.surface_force_elements = graph_inputs.bc_force
+            self.surface_force_magnitude = graph_inputs.bc_force_magnitude
 
         self.body_force = None
         
