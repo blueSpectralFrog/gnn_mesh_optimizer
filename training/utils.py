@@ -37,7 +37,6 @@ def gen_zero_params_gnn(model, params_randL):
 
     return freeze(params_zero)
 
-
 def initialise_network_params(vertex_data_generator, edge_data_generator, ref_geom, model, material_data_generator, rng_seed: int):
     key = random.PRNGKey(rng_seed)
 

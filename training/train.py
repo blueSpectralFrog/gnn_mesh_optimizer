@@ -165,17 +165,15 @@ class PhysicsLearner:
             with pathlib.Path(self.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
                 pickle.dump(self.params, fp)
 
-def run_training(emulator_config_dict, graph_inputs, trained_params_dir, normalisation_statistics_dir):
+def run_training(emulator_config_dict, graph_inputs, ref_geom, trained_params_dir, normalisation_statistics_dir):
 
     print("Training stub started...")
-
-    ref_geom = utils_data.ReferenceGeometry(graph_inputs)
 
     emulator_config_dict['mlp_features'] = [emulator_config_dict['mlp_width']]*emulator_config_dict['mlp_depth']
     emulator_config_dict['output_dim'] = ref_geom._output_dim
 
     train_dg = utils_data.DataGenerator(normalisation_statistics_dir)
-    external_forces = utils_data.ExtForceTemp(graph_inputs)
+    external_forces = utils_data.ExtForceTemp(ref_geom)
 
     emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, train_dg, ref_geom)
 

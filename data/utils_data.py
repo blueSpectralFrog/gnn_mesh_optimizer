@@ -1,12 +1,17 @@
 # Utility functions for batching, logging, etc.
 import jax
 import jax.numpy as jnp
+import os
+import xml.etree.ElementTree as ET
+import xmltodict
 from jax import device_put, random
 import numpy as np
 import networkx as nx
 from networkx.algorithms.community import kernighan_lin_bisection
 
 from scipy.stats.qmc import LatinHypercube, scale as qmc_scale
+
+import physics.utils_potential_energy as utils_pe
 
 EDGE_PATTERNS = {
     "tetra": [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)],
@@ -27,11 +32,11 @@ ELEMENT_VOLUME_BKDOWN = {
 }
 
 class ExtForceTemp:
-    def __init__(self, graph_inputs):
+    def __init__(self, ref_geom):
 
-        if graph_inputs.bc_force:
-            self.surface_force_elements = graph_inputs.bc_force
-            self.surface_force_magnitude = graph_inputs.bc_force_magnitude
+        if ref_geom.boundary_dict:
+            self.surface_force_elements = ref_geom.boundary_dict['']
+            self.surface_force_magnitude = ref_geom.boundary_dict['Force Magnitude']
 
         self.body_force = None
         
@@ -128,7 +133,7 @@ class DataGenerator:
 
 
 class ReferenceGeometry:
-    def __init__(self, graph_inputs):
+    def __init__(self, data_dir, graph_inputs):
         self.init_node_position = graph_inputs.node_position[:,0,:]
         self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.nodes_unique_to_training]
         self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
@@ -143,8 +148,6 @@ class ReferenceGeometry:
                 element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
-        # TODO:
-        # need constitutive law insertion here 
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
@@ -156,6 +159,11 @@ class ReferenceGeometry:
 
         self._fibre_field = None
 
+        self.read_model_data(data_dir, graph_inputs)
+
+    def add(self, **kwargs):
+        for name, value in kwargs.items():
+            setattr(self, name, value)
 
     def element_volume(self, tet_vert):
 
@@ -177,6 +185,50 @@ class ReferenceGeometry:
                                         ))) / 6.0)
 
         return _tetrahedron_calc_volume(tet_vert)
+    
+    def contains_all_elements(self, b_row, a_row):
+        return jnp.all(jnp.isin(a_row, b_row))
+
+    def find_rows_in_B_for_each_row_in_A(self, A, B):
+        # For each row in A, return a boolean mask over rows in B
+        return jax.vmap(lambda a_row: jax.vmap(lambda b_row: self.contains_all_elements(b_row, a_row))(B))(A)
+    
+    def matched_indices(self, A, B):
+        match_matrix = self.find_rows_in_B_for_each_row_in_A(A, B)
+        return [list(map(int, jnp.where(match_matrix[i])[0]))[0] for i in range(match_matrix.shape[0])]
+
+    def read_model_data(self, data_dir, graph_inputs):
+
+        # TODO: Eventually, this will have to be semi-auto, needing input from the user to identify which BC
+        #       is which, e.g.: Surface1 -> displacement constraint in (x,y,z) etc. 
+        file = sorted([os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.feb')])
+        tree = ET.parse(file[-1])
+        root = tree.getroot()
+
+        with open(file[-1], "r") as f:
+            data_dict = xmltodict.parse(f.read())
+
+        elements = jnp.vstack([list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Elements']['elem']])
+
+        BOUNDARY_DICT = {}
+        for boundary in data_dict['febio_spec']['Mesh']['Surface']:
+            BOUNDARY_DICT[boundary['@name']] = {}
+            BOUNDARY_DICT[boundary['@name']]['nodes'] = jnp.vstack([list(map(int, nodes['#text'].split(','))) for nodes in boundary['quad4']])
+            # compute areas and normal vectors of each triangular facet on the pressure surface ($\partial \Omega^\sigma$ in Eq. 1 of the manuscript)
+            tri_elements_1 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, :3] 
+            tri_elements_2 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, 1:]
+            tri_elements = jnp.concatenate([tri_elements_1, tri_elements_2]) - 1 # -1 to account for the xml indexing starting at 1
+
+            areas, _ = utils_pe.compute_area_N(tri_elements, self.init_node_position)
+            BOUNDARY_DICT[boundary['@name']]['area'] = sum(areas)
+
+            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(BOUNDARY_DICT[boundary['@name']]['nodes'], elements)
+
+            #TODO: ^ NOT REMAPPED ELEMENTS. Have to find correspondance again somehow
+            
+        BOUNDARY_DICT['Force Magnitude'] = list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(',')))
+
+        self.add(boundary_info=BOUNDARY_DICT)
 
 def splitter(graph_inputs, train_size=0.8, rng_key=None):
     """

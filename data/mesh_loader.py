@@ -5,8 +5,6 @@ import numpy as np
 import jax.numpy as jnp
 import os
 import data.utils_data as utils_data
-import xml.etree.ElementTree as ET
-import xmltodict
 
 class GraphInputs:
         def __init__(self, **kwargs):
@@ -16,25 +14,6 @@ class GraphInputs:
         def add(self, **kwargs):
             for name, value in kwargs.items():
                 setattr(self, name, value)
-
-def read_model_data(data_dir):
-
-    file = sorted([os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.feb')])
-    tree = ET.parse(file[-1])
-    root = tree.getroot()
-
-    with open(file[-1], "r") as f:
-        data_dict = xmltodict.parse(f.read())
-
-    bc_constraint = [list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Surface'][0]['quad4']]
-    bc_constraint = jnp.vstack(bc_constraint)
-
-    bc_force = [list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Surface'][1]['quad4']]
-    bc_force = jnp.vstack(bc_force)
-
-    bc_force_magnitude = list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(',')))
-
-    return bc_constraint, bc_force, bc_force_magnitude
 
 def read_simulation_data(data_dir):
 
@@ -119,7 +98,6 @@ def identify_dirichlet_boundary(node_displacement):
 
 def extract_graph_inputs(data_dir, sim_output_data_label):
 
-    bc_constraint, bc_force, bc_force_magnitude = read_model_data(data_dir)
     node_position, node_data_dict, edge_sim_data, cell_data, mesh_connectivity, cell_type, edges = read_simulation_data(data_dir)
 
     node_data = stack_simulation_data(node_data_dict, sim_output_data_label) # displacement data
@@ -128,5 +106,4 @@ def extract_graph_inputs(data_dir, sim_output_data_label):
     dirichlet_boundary_nodes = identify_dirichlet_boundary(node_data) # vertice data, not including fibre information
 
     return GraphInputs(vertex_data=dirichlet_boundary_nodes, node_position=node_position, node_data=node_data, edge_sim_data=edge_sim_data, cell_data=cell_data,
-                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges, bc_constraint=bc_constraint,
-                        bc_force=bc_force, bc_force_magnitude=bc_force_magnitude)
+                        mesh_connectivity=mesh_connectivity, cell_type=cell_type, edges=edges)

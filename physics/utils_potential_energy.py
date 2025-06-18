@@ -9,11 +9,11 @@ import jax.numpy as jnp
 
 from typing import Callable
 
-def compute_area_N_facet(facet: jnp.ndarray, coords: jnp.ndarray, elements: jnp.ndarray):
+def compute_area_N_facet(facet: jnp.ndarray, coords: jnp.ndarray):
     """Compute area and normal vector N for a triangular surface facet """
 
     # indices of the 3 nodes at the corner of the triangular
-    node_indices = facet[1:]
+    node_indices = facet
 
     # coordinates of the corner nodes
     node_coords = coords[node_indices]
@@ -23,15 +23,6 @@ def compute_area_N_facet(facet: jnp.ndarray, coords: jnp.ndarray, elements: jnp.
 
     # indices of the element to which the surface facet belongs
     elem_index = facet[0]
-
-    # indices of the 4 nodes at the corners of the tetrahedral element
-    nodes_elem_index = elements[elem_index]
-
-    # coordinates of the 4 corner nodes
-    elem_nodes = coords[nodes_elem_index]
-
-    # the centre point of the element
-    elem_centre = elem_nodes.mean(0)
 
     # compute vectors which describe 3 sides of the triangular facet
     p0, p1, p2 = node_coords
@@ -54,10 +45,6 @@ def compute_area_N_facet(facet: jnp.ndarray, coords: jnp.ndarray, elements: jnp.
     # rescale normal vector N to unit length
     N_mag = jnp.sqrt(((Nt**2).sum()))
     N = Nt / N_mag
-
-    # ensure that N is pointing outwards
-    v_in = elem_centre - face_centre
-    N = jnp.where(jnp.dot(v_in, N) > 0, -N, N)
 
     return area, N
 
@@ -198,7 +185,7 @@ def compute_surface_work_element(F: jnp.ndarray, J: jnp.ndarray, disp: jnp.ndarr
 
 
 # vmap above functions which are defined per element/surface facet, to work over an entire mesh
-compute_area_N        = jax.vmap(compute_area_N_facet, in_axes=[0, None, None])
+compute_area_N        = jax.vmap(compute_area_N_facet, in_axes=(0, None))
 compute_vol           = jax.vmap(compute_element_vol, [0, None])
 compute_def_gradient  = jax.vmap(compute_def_gradient_element, in_axes = [0] + [None]*3)
 compute_internal_work = jax.vmap(compute_internal_work_element, in_axes = [0]*4 + [None]*2)

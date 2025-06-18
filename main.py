@@ -23,10 +23,11 @@ if __name__ == "__main__":
     #################################
     # TRAIN 
     #################################
+
+    ##### Manage simulation data
     graph_inputs = ml.extract_graph_inputs(data_directory, 'displacement')
-
     graph_inputs = utils_data.splitter(graph_inputs, train_size)
-
+    
     # Create a remapping array
     remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
     remap = remap.at[graph_inputs.nodes_unique_to_training].set(jnp.arange(len(graph_inputs.nodes_unique_to_training)))
@@ -53,7 +54,10 @@ if __name__ == "__main__":
     config_path = f"./data/configs/{task}"
     config_dict = yaml.safe_load(open(f"{config_path}", 'r'))
     
-    run_training(config_dict, graph_inputs, data_directory, normalisation_statistics_dir)
+    ##### Manage initial reference data
+    ref_geom = utils_data.ReferenceGeometry(data_directory, graph_inputs)
+    
+    run_training(config_dict, graph_inputs, ref_geom, data_directory, normalisation_statistics_dir)
 
     #################################
     # EVALUATE 
