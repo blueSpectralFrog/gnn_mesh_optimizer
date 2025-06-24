@@ -31,13 +31,17 @@ ELEMENT_VOLUME_BKDOWN = {
                    [3, 4, 6, 2],],  # Vertical edges
 }
 
-class ExtForceTemp:
-    def __init__(self, ref_geom):
+class ExternalForceClass:
+    def __init__(self, ref_model):
 
-        if ref_geom.boundary_dict:
-            self.surface_force_elements = ref_geom.boundary_dict['']
-            self.surface_force_magnitude = ref_geom.boundary_dict['Force Magnitude']
-
+        if ref_model.boundary_info:
+            self.body_force = None #ref_model.boundary_info['']
+            self.surface_force = ref_model.boundary_info['Force Magnitude']
+            self.tri_surface_element_indices = ref_model.boundary_info['Force1']['surface element indices']
+            self.tri_surface_node_indices = ref_model.boundary_info['Force1']['surface node indices']
+            self.surface_force_magnitude = ref_model.boundary_info['Force Magnitude']
+            self.quad_surface_area_normals = ref_model.boundary_info['Force1']['quad_surface_area_normals']
+            self.quad_surface_node_normals = ref_model.boundary_info['Force1']['quad_surface_node_normals']
         self.body_force = None
         
 class DataGenerator:
@@ -133,7 +137,7 @@ class DataGenerator:
 
 
 class ReferenceGeometry:
-    def __init__(self, data_dir, graph_inputs):
+    def __init__(self, data_dir, graph_inputs, remap):
         self.init_node_position = graph_inputs.node_position[:,0,:]
         self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.nodes_unique_to_training]
         self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
@@ -159,7 +163,7 @@ class ReferenceGeometry:
 
         self._fibre_field = None
 
-        self.read_model_data(data_dir, graph_inputs)
+        self.read_model_data(data_dir, graph_inputs, remap)
 
     def add(self, **kwargs):
         for name, value in kwargs.items():
@@ -197,7 +201,7 @@ class ReferenceGeometry:
         match_matrix = self.find_rows_in_B_for_each_row_in_A(A, B)
         return [list(map(int, jnp.where(match_matrix[i])[0]))[0] for i in range(match_matrix.shape[0])]
 
-    def read_model_data(self, data_dir, graph_inputs):
+    def read_model_data(self, data_dir, graph_inputs, remap):
 
         # TODO: Eventually, this will have to be semi-auto, needing input from the user to identify which BC
         #       is which, e.g.: Surface1 -> displacement constraint in (x,y,z) etc. 
@@ -214,21 +218,44 @@ class ReferenceGeometry:
         for boundary in data_dict['febio_spec']['Mesh']['Surface']:
             BOUNDARY_DICT[boundary['@name']] = {}
             BOUNDARY_DICT[boundary['@name']]['nodes'] = jnp.vstack([list(map(int, nodes['#text'].split(','))) for nodes in boundary['quad4']])
+            # TODO: Problem here^ the ZeroDisplacement1 contains the right amount of nodes. Force1 does not!!!!
+
             # compute areas and normal vectors of each triangular facet on the pressure surface ($\partial \Omega^\sigma$ in Eq. 1 of the manuscript)
             tri_elements_1 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, :3] 
             tri_elements_2 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, 1:]
             tri_elements = jnp.concatenate([tri_elements_1, tri_elements_2]) - 1 # -1 to account for the xml indexing starting at 1
 
-            areas, _ = utils_pe.compute_area_N(tri_elements, self.init_node_position)
+            # area
+            areas, normals = utils_pe.compute_area_N(tri_elements, self.init_node_position)
+            normals = self.combine_triangle_normals_to_quad(normals)
             BOUNDARY_DICT[boundary['@name']]['area'] = sum(areas)
 
-            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(BOUNDARY_DICT[boundary['@name']]['nodes'], elements)
+            # normals
+            node_normals = np.zeros((max(np.unique(np.hstack(tri_elements)))+1, 3))
+            for facet in tri_elements:
+                for node in facet:
+                    node_normals[node] = node_normals[node] + normals[node]
+            row_sums = jnp.sum(node_normals, axis=1, keepdims=True)
+            node_normals = jnp.where(row_sums == 0, 0.0, node_normals / row_sums)
+            BOUNDARY_DICT[boundary['@name']]['quad_surface_area_normals'] = normals
+            BOUNDARY_DICT[boundary['@name']]['quad_surface_node_normals_all'] = node_normals
+            BOUNDARY_DICT[boundary['@name']]['quad_surface_node_normals'] = node_normals[~np.all(node_normals == 0, axis=1)]
+            
+            # remap surface node indices 
+            remapped_facets = jnp.vstack([facet for facet in remap[BOUNDARY_DICT[boundary['@name']]['nodes']-1] if -1 not in facet])
 
-            #TODO: ^ NOT REMAPPED ELEMENTS. Have to find correspondance again somehow
+            # find elements which contain surface facets
+            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(remapped_facets, graph_inputs.remapped_train_cell_data)
+            
+            # find surface node indices 
+            BOUNDARY_DICT[boundary['@name']]['surface node indices'] = np.unique(np.hstack(remapped_facets))
             
         BOUNDARY_DICT['Force Magnitude'] = list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(',')))
 
         self.add(boundary_info=BOUNDARY_DICT)
+
+    def combine_triangle_normals_to_quad(self, normals):
+        return jnp.vstack([np.average((normals[i], normals[i+np.floor(len(normals)/2).astype(int)]), axis=0) for i in range(int(len(normals)/2))])
 
 def splitter(graph_inputs, train_size=0.8, rng_key=None):
     """

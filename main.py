@@ -29,11 +29,11 @@ if __name__ == "__main__":
     graph_inputs = utils_data.splitter(graph_inputs, train_size)
     
     # Create a remapping array
-    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
+    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1) # shape: total num of nodes
     remap = remap.at[graph_inputs.nodes_unique_to_training].set(jnp.arange(len(graph_inputs.nodes_unique_to_training)))
 
     # Apply the remap
-    remapped_train_cell_data = remap[graph_inputs.train_cell_data]
+    remapped_train_cell_data = remap[graph_inputs.train_cell_data] # "skips" the -1s in the remap
     graph_inputs.add(remapped_train_cell_data=remapped_train_cell_data)
 
     # readjust the senders/receivers in graph inputs to account for train/test split:
@@ -55,14 +55,15 @@ if __name__ == "__main__":
     config_dict = yaml.safe_load(open(f"{config_path}", 'r'))
     
     ##### Manage initial reference data
-    ref_geom = utils_data.ReferenceGeometry(data_directory, graph_inputs)
+    ref_model = utils_data.ReferenceGeometry(data_directory, graph_inputs, remap)
     
-    run_training(config_dict, graph_inputs, ref_geom, data_directory, normalisation_statistics_dir)
+    run_training(config_dict, graph_inputs, ref_model, data_directory, normalisation_statistics_dir)
 
     #################################
     # EVALUATE 
     #################################
-    graph_inputs.add(chosen_cells=test_cell_data, chosen_nodes=jnp.unique(jnp.hstack(test_cell_data)))
+    graph_inputs.add(chosen_cells=test_cell_data, 
+                     chosen_nodes=jnp.unique(jnp.hstack(test_cell_data)))   
 
     # Create a remapping array
     remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)

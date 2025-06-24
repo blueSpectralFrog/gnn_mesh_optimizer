@@ -30,13 +30,13 @@ OPTIMISATION_ALGORITHM = optax.adam
 #                                    mlp_depth=MLP_DEPTH,
 #                                    rng_seed=RNG_SEED)
 
-def compute_loss_pinn(params, theta_tuple, pred_fn, ref_geom_data, external_forces):
+def compute_loss_pinn(params, theta_tuple, pred_fn, ref_model_data, external_forces):
     """Compute total potential energy from emulator prediction"""
 
     theta_norm, theta = theta_tuple
     Upred = pred_fn(params, theta_norm)
 
-    return total_potential_energy(Upred, theta, ref_geom_data, external_forces)
+    return total_potential_energy(Upred, theta, ref_model_data, external_forces)
 
 def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     """Train emulator for one theta input point """
@@ -66,7 +66,7 @@ def predict_dataset(data_loader, pred_fn):
 class PhysicsLearner:
     """Class for training PI-GNN emulator and saving learned parameters"""
 
-    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_geom_data, external_forces=None, logging=None, results_save_dir=None, summary_writer=None):
+    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_model_data, external_forces=None, logging=None, results_save_dir=None, summary_writer=None):
 
         self.train_dg = train_dg
         self.params = params
@@ -84,7 +84,7 @@ class PhysicsLearner:
         # intitialise loss as function of displacement and theta
         self.train_loss_fn = partial(compute_loss_pinn,
                                      pred_fn=pred_fn,
-                                     ref_geom_data=ref_geom_data,
+                                     ref_model_data=ref_model_data,
                                      external_forces=external_forces)
 
         # jit the training step function for faster execution
@@ -165,22 +165,22 @@ class PhysicsLearner:
             with pathlib.Path(self.results_save_dir, f'trainedNetworkParams.pkl').open('wb') as fp:
                 pickle.dump(self.params, fp)
 
-def run_training(emulator_config_dict, graph_inputs, ref_geom, trained_params_dir, normalisation_statistics_dir):
+def run_training(emulator_config_dict, graph_inputs, ref_model, trained_params_dir, normalisation_statistics_dir):
 
     print("Training stub started...")
 
     emulator_config_dict['mlp_features'] = [emulator_config_dict['mlp_width']]*emulator_config_dict['mlp_depth']
-    emulator_config_dict['output_dim'] = ref_geom._output_dim
+    emulator_config_dict['output_dim'] = ref_model._output_dim
 
     train_dg = utils_data.DataGenerator(normalisation_statistics_dir)
-    external_forces = utils_data.ExtForceTemp(ref_geom)
+    external_forces = utils_data.ExternalForceClass(ref_model)
 
-    emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, train_dg, ref_geom)
+    emulator_pred_fn, params, emulator = training.utils.create_emulator(emulator_config_dict, graph_inputs, train_dg, ref_model)
 
     # zero out the weights in the last layer of the decoder FCNNs
     params = training.utils.gen_zero_params_gnn(emulator, params)
     
-    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_geom, external_forces, results_save_dir='./data')
+    learner = PhysicsLearner(emulator_pred_fn, train_dg, params, emulator_config_dict['lr'], OPTIMISATION_ALGORITHM, ref_model, external_forces, results_save_dir='./data')
     
     # train first half at learning rate lr
     n_epochs_start = max(emulator_config_dict['n_epochs']//2, 1)
@@ -213,26 +213,26 @@ def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: floa
     logging.info(f'Results save directory: {results_save_dir}\n')
 
     # load reference geometry data
-    ref_geom = utils_data.ReferenceGeometry(graph_inputs)
+    ref_model = utils_data.ReferenceGeometry(graph_inputs)
 
     # store external force data (body forces and/or surface forces)
-    external_forces = utils_data.ExtForceTemp()
+    external_forces = utils_data.ExternalForceClass()
 
     # load test simulation data
     # test_data = utils_data.DataLoader(data_path, 'test') -> replaced by ml.extract_graph_inputs which already gets node data
     logging.info(f'Number of test data points: {graph_inputs.chosen_node_data.shape[0]}')
 
     # create dictionary of hyperparameters of the GNN emulator
-    config_dict = training.utils.create_config_dict(K, n_epochs, lr, ref_geom._output_dim)
+    config_dict = training.utils.create_config_dict(K, n_epochs, lr, ref_model._output_dim)
 
     # if trained_params_dir is not set, parameters are read from results_save_dir
     if trained_params_dir == "None": trained_params_dir = results_save_dir
 
     # initialise GNN emulator and read trained network parameters
-    pred_fn, trained_params, emulator = utils.initialise_emulator(config_dict, test_data, results_save_dir, ref_geom, True, trained_params_dir)
+    pred_fn, trained_params, emulator = utils.initialise_emulator(config_dict, test_data, results_save_dir, ref_model, True, trained_params_dir)
 
     # vmap to allow total potential energy to be computed for all simulations similtaneously
-    pe_vmap = jax.vmap(partial(total_potential_energy, ref_geom_data=ref_geom, external_forces=external_forces))
+    pe_vmap = jax.vmap(partial(total_potential_energy, ref_model_data=ref_model, external_forces=external_forces))
 
     # hardcode trained parameters into prediction function and jit for faster execution
     pred_fn_jit = jit(lambda theta_norm: pred_fn(trained_params, theta_norm))
@@ -253,10 +253,10 @@ def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: floa
     logging.info(f'Max PE calc error against FEniCS: {calc_errors.max():.4f}% (sim {calc_errors.argmax()})\n')
 
     # compute deformation gradient and potential energy from true displacements
-    Ftrue, Jtrue, I1true = utils_eval.compute_F_J_I1_vmap(Utrue, ref_geom)
+    Ftrue, Jtrue, I1true = utils_eval.compute_F_J_I1_vmap(Utrue, ref_model)
 
     # compute deformation gradient and potential energy from predicted displacements
-    Fpred, Jpred, I1pred = utils_eval.compute_F_J_I1_vmap(Upred, ref_geom)
+    Fpred, Jpred, I1pred = utils_eval.compute_F_J_I1_vmap(Upred, ref_model)
 
     # collect true/predicted arrays into tuples
     true_arrs = Utrue, PEtrue, Ftrue, Jtrue, I1true
@@ -279,4 +279,4 @@ def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: floa
 
     from utils_visualisation import make_3D_visualisations as make_visuals
     logging.info('Generating 3D visualisation files')
-    make_visuals(Utrue, Upred, ref_geom.ref_coords, data_path, results_save_dir, logging)
+    make_visuals(Utrue, Upred, ref_model.ref_coords, data_path, results_save_dir, logging)
