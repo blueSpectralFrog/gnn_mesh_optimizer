@@ -179,7 +179,7 @@ def compute_surface_work_element(F: jnp.ndarray, J: jnp.ndarray, disp: jnp.ndarr
     surface_disp = disp.mean(0)
 
     # surface work on single triangular facet computed as from third summand in Eq. (20) of the manuscript
-    pressure_work = jnp.dot(surface_disp, JNdA) * surface_force
+    pressure_work = jnp.dot(surface_disp, JNdA) * jnp.linalg.norm(jnp.array(surface_force))
 
     return pressure_work
 
@@ -193,17 +193,17 @@ compute_body_work     = jax.vmap(compute_body_work_element, in_axes = [0]*2 + [N
 compute_surface_work  = jax.vmap(compute_surface_work_element, in_axes = [0]*4 + [None])
 
 
-def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_model_data, external_forces):
+def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_model, external_forces):
     """Compute total potential energy by evaluating Eq. (20) of the manuscript"""
 
     # current coords are simple reference coords + displacement
-    cur_coords = ref_model_data.init_chosen_node_position + displacement
+    cur_coords = ref_model.init_chosen_node_position + displacement
 
     # compute deformation gradient for each element in mesh
-    F, J = compute_def_gradient(ref_model_data.elements, ref_model_data.init_chosen_node_position, cur_coords, ref_model_data.Jtransform)
+    F, J = compute_def_gradient(ref_model.elements, ref_model.init_chosen_node_position, cur_coords, ref_model.Jtransform)
 
     # compute internal work done given specified constitutive law
-    Psi_internal = compute_internal_work(F, J, ref_model_data.elements_vol, ref_model_data._fibre_field, theta, ref_model_data.constitutive_law).sum()
+    Psi_internal = compute_internal_work(F, J, ref_model.elements_vol, ref_model._fibre_field, theta, ref_model.constitutive_law).sum()
 
     # initialise external work to be zero
     Psi_external = 0.
@@ -211,24 +211,24 @@ def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_mo
     # compute external work due to body forces
     if external_forces.body_force is not None:
 
-        Psi_external += compute_body_work(ref_model_data.elements,
-                                          ref_model_data.element_vols,
+        Psi_external += compute_body_work(ref_model.elements,
+                                          ref_model.element_vols,
                                           displacement,
                                           external_forces.body_force).sum()
 
     # compute external work due to surface forces
     if external_forces.surface_force is not None:
 
-        F_surface = F[jnp.array(external_forces.tri_surface_element_indices)]
-        J_surface = J[jnp.array(external_forces.tri_surface_element_indices)]
-        disp_surface = displacement[external_forces.tri_surface_node_indices]
+        F_surface = F[jnp.array(external_forces.surface_element_indices)]
+        J_surface = J[jnp.array(external_forces.surface_element_indices)]
+        disp_surface = displacement[external_forces.surface_facet_elements]
 
         surface_force = external_forces.surface_force
 
         Psi_external += compute_surface_work(F_surface,
                                              J_surface,
                                              disp_surface,
-                                             external_forces.quad_surface_node_normals,
+                                             external_forces.surface_area_normals_selected,
                                              surface_force).sum()
 
     # return total potential energy

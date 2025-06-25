@@ -37,11 +37,14 @@ class ExternalForceClass:
         if ref_model.boundary_info:
             self.body_force = None #ref_model.boundary_info['']
             self.surface_force = ref_model.boundary_info['Force Magnitude']
-            self.tri_surface_element_indices = ref_model.boundary_info['Force1']['surface element indices']
-            self.tri_surface_node_indices = ref_model.boundary_info['Force1']['surface node indices']
+            self.surface_element_indices = ref_model.boundary_info['Force1']['surface element indices']
+            self.surface_node_indices = ref_model.boundary_info['Force1']['surface node indices']
             self.surface_force_magnitude = ref_model.boundary_info['Force Magnitude']
-            self.quad_surface_area_normals = ref_model.boundary_info['Force1']['quad_surface_area_normals']
-            self.quad_surface_node_normals = ref_model.boundary_info['Force1']['quad_surface_node_normals']
+            self.surface_area_normals = ref_model.boundary_info['Force1']['quad_surface_area_normals']
+            self.surface_area_normals_selected = ref_model.boundary_info['Force1']['quad_surface_area_normals_train']
+            self.surface_node_normals = jnp.unique(jnp.hstack(ref_model.boundary_info['Force1']['nodes']))
+            self.surface_facet_elements = ref_model.boundary_info['Force1']['surface facet elements']
+
         self.body_force = None
         
 class DataGenerator:
@@ -199,7 +202,8 @@ class ReferenceGeometry:
     
     def matched_indices(self, A, B):
         match_matrix = self.find_rows_in_B_for_each_row_in_A(A, B)
-        return [list(map(int, jnp.where(match_matrix[i])[0]))[0] for i in range(match_matrix.shape[0])]
+        matches = [list(map(int, jnp.where(match_matrix[i])[0])) for i in range(match_matrix.shape[0])]
+        return [a[0] for a in matches if a]
 
     def read_model_data(self, data_dir, graph_inputs, remap):
 
@@ -213,17 +217,18 @@ class ReferenceGeometry:
             data_dict = xmltodict.parse(f.read())
 
         elements = jnp.vstack([list(map(int, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Elements']['elem']])
+        node_coordinates = jnp.vstack([list(map(float, nodes['#text'].split(','))) for nodes in data_dict['febio_spec']['Mesh']['Nodes']['node']])
 
         BOUNDARY_DICT = {}
         for boundary in data_dict['febio_spec']['Mesh']['Surface']:
             BOUNDARY_DICT[boundary['@name']] = {}
-            BOUNDARY_DICT[boundary['@name']]['nodes'] = jnp.vstack([list(map(int, nodes['#text'].split(','))) for nodes in boundary['quad4']])
-            # TODO: Problem here^ the ZeroDisplacement1 contains the right amount of nodes. Force1 does not!!!!
+            BOUNDARY_DICT[boundary['@name']]['nodes'] = jnp.vstack([list(map(int, nodes['#text'].split(','))) 
+                                                                    for nodes in boundary['quad4']]) - 1 
 
             # compute areas and normal vectors of each triangular facet on the pressure surface ($\partial \Omega^\sigma$ in Eq. 1 of the manuscript)
             tri_elements_1 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, :3] 
             tri_elements_2 = BOUNDARY_DICT[boundary['@name']]['nodes'][:, 1:]
-            tri_elements = jnp.concatenate([tri_elements_1, tri_elements_2]) - 1 # -1 to account for the xml indexing starting at 1
+            tri_elements = jnp.concatenate([tri_elements_1, tri_elements_2]) 
 
             # area
             areas, normals = utils_pe.compute_area_N(tri_elements, self.init_node_position)
@@ -231,21 +236,32 @@ class ReferenceGeometry:
             BOUNDARY_DICT[boundary['@name']]['area'] = sum(areas)
 
             # normals
-            node_normals = np.zeros((max(np.unique(np.hstack(tri_elements)))+1, 3))
+            node_normals = np.zeros((max(np.hstack(tri_elements))+1, 3)) # zeros array of shape 
             for facet in tri_elements:
                 for node in facet:
                     node_normals[node] = node_normals[node] + normals[node]
             row_sums = jnp.sum(node_normals, axis=1, keepdims=True)
             node_normals = jnp.where(row_sums == 0, 0.0, node_normals / row_sums)
             BOUNDARY_DICT[boundary['@name']]['quad_surface_area_normals'] = normals
-            BOUNDARY_DICT[boundary['@name']]['quad_surface_node_normals_all'] = node_normals
             BOUNDARY_DICT[boundary['@name']]['quad_surface_node_normals'] = node_normals[~np.all(node_normals == 0, axis=1)]
-            
-            # remap surface node indices 
-            remapped_facets = jnp.vstack([facet for facet in remap[BOUNDARY_DICT[boundary['@name']]['nodes']-1] if -1 not in facet])
+
+            # remap surface node indices
+            index_and_remap = [i for i in 
+                                [facet for facet in 
+                                    enumerate(remap[BOUNDARY_DICT[boundary['@name']]['nodes']]) if -1 not in facet[1]]]
+            remapped_facets_indices = jnp.array([i[0] for i in index_and_remap])
+            remapped_facets  = jnp.vstack([i[1] for i in index_and_remap])
+
+            BOUNDARY_DICT[boundary['@name']]['surface facet elements'] = remapped_facets
+            BOUNDARY_DICT[boundary['@name']]['surface facet elements train index'] = remapped_facets_indices
+            BOUNDARY_DICT[boundary['@name']]['quad_surface_area_normals_train'] = normals[remapped_facets_indices]
 
             # find elements which contain surface facets
-            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(remapped_facets, graph_inputs.remapped_train_cell_data)
+            surface_elements = self.matched_indices(BOUNDARY_DICT[boundary['@name']]['nodes'], 
+                                                                        graph_inputs.mesh_connectivity)
+            surface_elements_remapped = jnp.vstack([facet for facet in remap[graph_inputs.mesh_connectivity[surface_elements]] 
+                                        if -1 not in facet])
+            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(surface_elements_remapped, graph_inputs.remapped_train_cell_data)
             
             # find surface node indices 
             BOUNDARY_DICT[boundary['@name']]['surface node indices'] = np.unique(np.hstack(remapped_facets))

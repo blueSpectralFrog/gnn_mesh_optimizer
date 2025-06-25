@@ -30,13 +30,13 @@ OPTIMISATION_ALGORITHM = optax.adam
 #                                    mlp_depth=MLP_DEPTH,
 #                                    rng_seed=RNG_SEED)
 
-def compute_loss_pinn(params, theta_tuple, pred_fn, ref_model_data, external_forces):
+def compute_loss_pinn(params, theta_tuple, pred_fn, ref_model, external_forces):
     """Compute total potential energy from emulator prediction"""
 
     theta_norm, theta = theta_tuple
     Upred = pred_fn(params, theta_norm)
 
-    return total_potential_energy(Upred, theta, ref_model_data, external_forces)
+    return total_potential_energy(Upred, theta, ref_model, external_forces)
 
 def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     """Train emulator for one theta input point """
@@ -66,7 +66,7 @@ def predict_dataset(data_loader, pred_fn):
 class PhysicsLearner:
     """Class for training PI-GNN emulator and saving learned parameters"""
 
-    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_model_data, external_forces=None, logging=None, results_save_dir=None, summary_writer=None):
+    def __init__(self, pred_fn, train_dg, params, lr, optim_algorithm, ref_model, external_forces=None, logging=None, results_save_dir=None, summary_writer=None):
 
         self.train_dg = train_dg
         self.params = params
@@ -84,11 +84,11 @@ class PhysicsLearner:
         # intitialise loss as function of displacement and theta
         self.train_loss_fn = partial(compute_loss_pinn,
                                      pred_fn=pred_fn,
-                                     ref_model_data=ref_model_data,
+                                     ref_model=ref_model,
                                      external_forces=external_forces)
 
         # jit the training step function for faster execution
-        self.train_step = jit(partial(train_step,
+        self.train_step = (partial(train_step,
                                       optimiser = self.optimiser,
                                       loss_fn = self.train_loss_fn))
 
@@ -232,7 +232,7 @@ def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: floa
     pred_fn, trained_params, emulator = utils.initialise_emulator(config_dict, test_data, results_save_dir, ref_model, True, trained_params_dir)
 
     # vmap to allow total potential energy to be computed for all simulations similtaneously
-    pe_vmap = jax.vmap(partial(total_potential_energy, ref_model_data=ref_model, external_forces=external_forces))
+    pe_vmap = jax.vmap(partial(total_potential_energy, ref_model=ref_model, external_forces=external_forces))
 
     # hardcode trained parameters into prediction function and jit for faster execution
     pred_fn_jit = jit(lambda theta_norm: pred_fn(trained_params, theta_norm))
