@@ -158,7 +158,7 @@ class ReferenceGeometry:
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
-        self.boundary_adjust_fn = dirichlet_bd_coords = lambda U: U*graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training]
+        self.boundary_adjust_fn = lambda U: U*(1-graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training])
         
         # coordinates of dirichlet: self.init_chosen_node_position[jnp.where((jnp.multiply(graph_inputs.nodes_unique_to_training,jnp.hstack(graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training])))!=0)[0]]
         

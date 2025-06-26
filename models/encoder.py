@@ -165,4 +165,4 @@ class PrimalGraphEmulator(nn.Module):
         thing = jnp.where(jnp.sum(self.boundary_adjust_fn(Upred), axis=1)!=0)[0]
 
         # return displacment prediction array
-        return Upred
+        return Upred, thing

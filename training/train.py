@@ -34,7 +34,7 @@ def compute_loss_pinn(params, theta_tuple, pred_fn, ref_model, external_forces):
     """Compute total potential energy from emulator prediction"""
 
     theta_norm, theta = theta_tuple
-    Upred = pred_fn(params, theta_norm)
+    Upred, thing = pred_fn(params, theta_norm)
 
     return total_potential_energy(Upred, theta, ref_model, external_forces)
 
