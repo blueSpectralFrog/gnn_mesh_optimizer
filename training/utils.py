@@ -56,7 +56,7 @@ def init_emulator_full(config_dict: dict, graph_inputs, material_data_generator,
                                            n_total_nodes= ref_model._n_real_nodes,
                                            output_dim= [config_dict['output_dim']],
                                         #    real_node_indices = ref_model._real_node_indices,
-                                        #    boundary_adjust_fn = ref_model.boundary_adjust_fn
+                                           boundary_adjust_fn = ref_model.boundary_adjust_fn
                                         )
 
     params = initialise_network_params(graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training], 

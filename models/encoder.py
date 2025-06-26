@@ -89,7 +89,7 @@ class PrimalGraphEmulator(nn.Module):
     n_total_nodes: int
     output_dim: int
     # real_node_indices: Sequence[bool]
-    # boundary_adjust_fn: Sequence[bool] = None
+    boundary_adjust_fn: Sequence[bool] = None
 
     @nn.compact
     def __call__(self, V: jnp.ndarray, E: jnp.ndarray, theta: jnp.ndarray, sow_latents=False):
@@ -159,8 +159,10 @@ class PrimalGraphEmulator(nn.Module):
         Upred = jnp.hstack(individual_mlp_predictions)
 
         # adjust predictions to account for displacement boundary conditions
-        # if self.boundary_adjust_fn is not None:
-        #     Upred = self.boundary_adjust_fn(Upred)
+        if self.boundary_adjust_fn is not None:
+            Upred = self.boundary_adjust_fn(Upred)
+
+        thing = jnp.where(jnp.sum(self.boundary_adjust_fn(Upred), axis=1)!=0)[0]
 
         # return displacment prediction array
         return Upred

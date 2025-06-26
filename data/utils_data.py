@@ -152,12 +152,15 @@ class ReferenceGeometry:
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
-                element_vol += self.element_volume(graph_inputs.node_position[:,0,:][element[jnp.array(n_tet)]])
+                element_vol += self.element_volume(self.init_chosen_node_position[element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
+        self.boundary_adjust_fn = dirichlet_bd_coords = lambda U: U*graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training]
+        
+        # coordinates of dirichlet: self.init_chosen_node_position[jnp.where((jnp.multiply(graph_inputs.nodes_unique_to_training,jnp.hstack(graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training])))!=0)[0]]
         
         # TODO:
         # Virtual nodes implementation? Need for larger meshes
