@@ -269,7 +269,7 @@ class ReferenceGeometry:
             # find surface node indices 
             BOUNDARY_DICT[boundary['@name']]['surface node indices'] = np.unique(np.hstack(remapped_facets))
             
-        BOUNDARY_DICT['Force Magnitude'] = list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(',')))
+        BOUNDARY_DICT['Force Magnitude'] = jnp.array(list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(','))))
 
         self.add(boundary_info=BOUNDARY_DICT)
 

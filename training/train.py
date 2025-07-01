@@ -105,7 +105,10 @@ class PhysicsLearner:
         for graph_idx in self.train_dg.epoch_indices:
             theta_tuple_idx = self.train_dg.get_data(graph_idx)
             self.params, self.opt_state, loss_idx = self.train_step(self.params, self.opt_state, theta_tuple_idx)
+            if loss_idx == jnp.array(jnp.nan):
+                loss_idx=0
             loss += loss_idx
+            print(f'epoch {graph_idx} loss: {loss_idx}')
         # train loss for epoch is mean total potential energy
         self.train_loss = loss / self.train_dg.epoch_size
         print(f'loss: {self.train_loss}')

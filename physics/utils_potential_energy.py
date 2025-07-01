@@ -228,7 +228,7 @@ def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_mo
         Psi_external += compute_surface_work(F_surface,
                                              J_surface,
                                              disp_surface,
-                                             -external_forces.surface_area_normals_selected,
+                                             external_forces.surface_area_normals_selected,
                                              surface_force).sum()
 
     # return total potential energy
