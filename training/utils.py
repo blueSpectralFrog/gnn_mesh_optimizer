@@ -59,8 +59,8 @@ def init_emulator_full(config_dict: dict, graph_inputs, material_data_generator,
                                            boundary_adjust_fn = ref_model.boundary_adjust_fn
                                         )
 
-    params = initialise_network_params(graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training], 
-                                       graph_inputs.chosen_edge_data, 
+    params = initialise_network_params(graph_inputs.vertex_data, 
+                                       graph_inputs.edge_data, 
                                        ref_model, 
                                        emulator, 
                                        material_data_generator,
@@ -74,8 +74,8 @@ def create_emulator(emulator_config_dict, graph_inputs, material_data_generator,
     emulator, params = init_emulator_full(emulator_config_dict, graph_inputs, material_data_generator, ref_model)
 
     emulator_pred_fn = lambda p, theta_norm: emulator.apply(p, 
-                                                            graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training], 
-                                                            graph_inputs.chosen_edge_data[:, 0], 
+                                                            graph_inputs.vertex_data, 
+                                                            graph_inputs.edge_data[:, 0], 
                                                             theta_norm)
 
     return emulator_pred_fn, params, emulator

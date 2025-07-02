@@ -45,6 +45,8 @@ def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
 
     grad_fn = jax.value_and_grad(partial_loss_fn)
     loss, grads = grad_fn(params)
+    grads_norm = optax.global_norm(grads)
+    print(f'grads_norm: {grads_norm:.2f}')
     
     # jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
     # jax.debug.print("Grad shape: {}", jax.tree_util.tree_map(lambda x: x.shape, grads))
@@ -99,16 +101,16 @@ class PhysicsLearner:
         if random_sampling:
             self.train_dg.resample_input_points()
         else:
-            self.train_dg.shuffle_epoch_indices()
+            pass #self.train_dg.shuffle_epoch_indices()
 
         loss = 0.
         for graph_idx in self.train_dg.epoch_indices:
             theta_tuple_idx = self.train_dg.get_data(graph_idx)
             self.params, self.opt_state, loss_idx = self.train_step(self.params, self.opt_state, theta_tuple_idx)
-            if loss_idx == jnp.array(jnp.nan):
-                loss_idx=0
+
             loss += loss_idx
-            print(f'epoch {graph_idx} loss: {loss_idx}')
+            print(f'graph_idx {graph_idx:.2f} loss: {loss_idx}, total loss: {loss:.2f}')
+            
         # train loss for epoch is mean total potential energy
         self.train_loss = loss / self.train_dg.epoch_size
         print(f'loss: {self.train_loss}')
@@ -119,7 +121,7 @@ class PhysicsLearner:
         # self.logging.info(f'Beginning training for {n_epochs} epochs')
         for epoch_idx in range(n_epochs):
 
-            print(f'epoch: {epoch_idx}')
+            print(f'EPOCH: {epoch_idx}')
             # train network for one epoch
             self.train_epoch(random_sampling)
 
@@ -147,7 +149,8 @@ class PhysicsLearner:
     def init_optimiser(self):
         """Initialise the optimiser used for training"""
 
-        self.optimiser = optax.inject_hyperparams(self.optim_algorithm)(learning_rate=self.lr)
+        self.optimiser = optax.chain(optax.clip_by_global_norm(1.0),                     # or your chosen threshold
+                                     optax.inject_hyperparams(self.optim_algorithm)(learning_rate=self.lr))
 
     def update_learning_rate(self, new_lr):
         """Update learning rate used for training"""

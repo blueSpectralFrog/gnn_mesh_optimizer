@@ -63,8 +63,8 @@ def isotropic_elastic(params, F, J, fibres=None):
 ## Define material parameter boundaries
 ####################################################
 
-params_lb = jnp.array([5000.]*2)
-params_ub = jnp.array([15000.]*2)
+params_lb = jnp.array([5000000.]*2)
+params_ub = jnp.array([15000000.]*2)
 
 ####################################################
 ## Sample parameters on log or uniform scale

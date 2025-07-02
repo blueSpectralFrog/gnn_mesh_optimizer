@@ -41,9 +41,8 @@ class ExternalForceClass:
             self.surface_node_indices = ref_model.boundary_info['Force1']['surface node indices']
             self.surface_force_magnitude = ref_model.boundary_info['Force Magnitude']
             self.surface_area_normals = ref_model.boundary_info['Force1']['quad_surface_area_normals']
-            self.surface_area_normals_selected = ref_model.boundary_info['Force1']['quad_surface_area_normals_train']
             self.surface_node_normals = jnp.unique(jnp.hstack(ref_model.boundary_info['Force1']['nodes']))
-            self.surface_facet_elements = ref_model.boundary_info['Force1']['surface facet elements']
+            self.surface_facet_elements = ref_model.boundary_info['Force1']['nodes']
 
         self.body_force = None
         
@@ -140,36 +139,35 @@ class DataGenerator:
 
 
 class ReferenceGeometry:
-    def __init__(self, data_dir, graph_inputs, remap):
+    def __init__(self, data_dir, graph_inputs):
         self.init_node_position = graph_inputs.node_position[:,0,:]
-        self.init_chosen_node_position = graph_inputs.node_position[:,0,:][graph_inputs.nodes_unique_to_training]
-        self._n_real_nodes, self._output_dim = self.init_chosen_node_position.shape
+        self._n_real_nodes, self._output_dim = self.init_node_position.shape
 
-        self.elements = graph_inputs.remapped_train_cell_data
+        self.elements = graph_inputs.mesh_connectivity
 
         self.elements_vol = jnp.zeros(self.elements.shape[0])
-        for index, element in enumerate(graph_inputs.remapped_train_cell_data):
+        for index, element in enumerate(graph_inputs.mesh_connectivity):
             element_vol = 0
             for n_tet in ELEMENT_VOLUME_BKDOWN[graph_inputs.cell_type]:
                 # keep in mind that self.init_node_position is now the size of the training nodeset
-                element_vol += self.element_volume(self.init_chosen_node_position[element[jnp.array(n_tet)]])
+                element_vol += self.element_volume(self.init_node_position[element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
         from data.constitutive_law import isotropic_elastic, J_transformation_fn
         self.constitutive_law = isotropic_elastic
         self.Jtransform = J_transformation_fn
-        self.boundary_adjust_fn = lambda U: U*(1-graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training])
+        self.boundary_adjust_fn = lambda U: U*(1-graph_inputs.vertex_data)
         
         # coordinates of dirichlet: self.init_chosen_node_position[jnp.where((jnp.multiply(graph_inputs.nodes_unique_to_training,jnp.hstack(graph_inputs.vertex_data[graph_inputs.nodes_unique_to_training])))!=0)[0]]
         
         # TODO:
         # Virtual nodes implementation? Need for larger meshes
 
-        self._output_dim = self.init_chosen_node_position.shape[-1]
+        self._output_dim = self.init_node_position.shape[-1]
 
         self._fibre_field = None
 
-        self.read_model_data(data_dir, graph_inputs, remap)
+        self.read_model_data(data_dir, graph_inputs)
 
     def add(self, **kwargs):
         for name, value in kwargs.items():
@@ -208,7 +206,7 @@ class ReferenceGeometry:
         matches = [list(map(int, jnp.where(match_matrix[i])[0])) for i in range(match_matrix.shape[0])]
         return [a[0] for a in matches if a]
 
-    def read_model_data(self, data_dir, graph_inputs, remap):
+    def read_model_data(self, data_dir, graph_inputs):
 
         # TODO: Eventually, this will have to be semi-auto, needing input from the user to identify which BC
         #       is which, e.g.: Surface1 -> displacement constraint in (x,y,z) etc. 
@@ -248,26 +246,14 @@ class ReferenceGeometry:
             BOUNDARY_DICT[boundary['@name']]['quad_surface_area_normals'] = normals
             BOUNDARY_DICT[boundary['@name']]['quad_surface_node_normals'] = node_normals[~np.all(node_normals == 0, axis=1)]
 
-            # remap surface node indices
-            index_and_remap = [i for i in 
-                                [facet for facet in 
-                                    enumerate(remap[BOUNDARY_DICT[boundary['@name']]['nodes']]) if -1 not in facet[1]]]
-            remapped_facets_indices = jnp.array([i[0] for i in index_and_remap])
-            remapped_facets  = jnp.vstack([i[1] for i in index_and_remap])
-
-            BOUNDARY_DICT[boundary['@name']]['surface facet elements'] = remapped_facets
-            BOUNDARY_DICT[boundary['@name']]['surface facet elements train index'] = remapped_facets_indices
-            BOUNDARY_DICT[boundary['@name']]['quad_surface_area_normals_train'] = normals[remapped_facets_indices]
-
             # find elements which contain surface facets
             surface_elements = self.matched_indices(BOUNDARY_DICT[boundary['@name']]['nodes'], 
                                                                         graph_inputs.mesh_connectivity)
-            surface_elements_remapped = jnp.vstack([facet for facet in remap[graph_inputs.mesh_connectivity[surface_elements]] 
-                                        if -1 not in facet])
-            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = self.matched_indices(surface_elements_remapped, graph_inputs.remapped_train_cell_data)
+
+            BOUNDARY_DICT[boundary['@name']]['surface element indices'] = surface_elements #self.matched_indices(surface_elements, graph_inputs.remapped_train_cell_data)
             
             # find surface node indices 
-            BOUNDARY_DICT[boundary['@name']]['surface node indices'] = np.unique(np.hstack(remapped_facets))
+            BOUNDARY_DICT[boundary['@name']]['surface node indices'] = np.unique(np.hstack(BOUNDARY_DICT[boundary['@name']]['nodes']))
             
         BOUNDARY_DICT['Force Magnitude'] = jnp.array(list(map(float, data_dict['febio_spec']['Loads']['surface_load']['force'].split(','))))
 
