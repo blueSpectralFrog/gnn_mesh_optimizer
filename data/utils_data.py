@@ -153,8 +153,8 @@ class ReferenceGeometry:
                 element_vol += self.element_volume(self.init_node_position[element[jnp.array(n_tet)]])
             self.elements_vol = self.elements_vol.at[index].set(element_vol)
 
-        from data.constitutive_law import isotropic_elastic, J_transformation_fn
-        self.constitutive_law = isotropic_elastic
+        from data.constitutive_law import NeoHookean, J_transformation_fn
+        self.constitutive_law = NeoHookean
         self.Jtransform = J_transformation_fn
         self.boundary_adjust_fn = lambda U: U*(1-graph_inputs.vertex_data)
         

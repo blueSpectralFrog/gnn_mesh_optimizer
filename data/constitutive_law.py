@@ -59,12 +59,50 @@ def isotropic_elastic(params, F, J, fibres=None):
     W = 0.5 * lam * (trace_eps ** 2) + mu * trace_eps_squared
     return W
 
+def NeoHookean(params, F, J, fibres=None):
+    """NeoHookean strain energy density function
+
+    Inputs:
+    -----------
+    params: jnp.array
+       Material parameter vector
+    F     : jnp.array
+       Deformation gradient
+    J     : jnp.array
+       Determinant of F
+    fibres: None
+       Not used here as we assume isotropic material
+
+    Returns:
+    ----------
+    sed: float
+       Strain energy density
+    """
+
+    # extract Lame material parameters
+    lambda_, mu = params
+
+    # right Cauchy-Green tensor
+    C = jnp.matmul(F.T, F)
+
+    # first invariant
+    Ic = jnp.trace(C)
+
+    # transform to stop very large values
+    Ic = I1_trans_fn(Ic)
+
+    lnJ = jnp.log(J)
+
+    sed = (mu/2.)*(Ic - 3.) - mu*lnJ + (lambda_/2.)*(lnJ**2)
+
+    return sed
+
 ####################################################
 ## Define material parameter boundaries
 ####################################################
 
-params_lb = jnp.array([5000000.]*2)
-params_ub = jnp.array([15000000.]*2)
+params_lb = jnp.array([50000.]*2)
+params_ub = jnp.array([150000.]*2)
 
 ####################################################
 ## Sample parameters on log or uniform scale

@@ -198,7 +198,8 @@ def total_potential_energy(displacement: jnp.ndarray, theta: jnp.ndarray, ref_mo
 
     # current coords are simple reference coords + displacement
     cur_coords = ref_model.init_node_position + displacement
-
+    jax.debug.print('displacement mean: {}', jnp.mean(displacement))
+    
     # compute deformation gradient for each element in mesh
     F, J = compute_def_gradient(ref_model.elements, ref_model.init_node_position, cur_coords, ref_model.Jtransform)
 

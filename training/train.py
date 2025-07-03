@@ -34,7 +34,7 @@ def compute_loss_pinn(params, theta_tuple, pred_fn, ref_model, external_forces):
     """Compute total potential energy from emulator prediction"""
 
     theta_norm, theta = theta_tuple
-    Upred, thing = pred_fn(params, theta_norm)
+    Upred = pred_fn(params, theta_norm)
 
     return total_potential_energy(Upred, theta, ref_model, external_forces)
 
@@ -46,7 +46,7 @@ def train_step(params, opt_state, theta_tuple, optimiser, loss_fn):
     grad_fn = jax.value_and_grad(partial_loss_fn)
     loss, grads = grad_fn(params)
     grads_norm = optax.global_norm(grads)
-    print(f'grads_norm: {grads_norm:.2f}')
+    jax.debug.print("Gradient norm: {:.2f}", grads_norm)
     
     # jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
     # jax.debug.print("Grad shape: {}", jax.tree_util.tree_map(lambda x: x.shape, grads))
@@ -90,10 +90,9 @@ class PhysicsLearner:
                                      external_forces=external_forces)
 
         # jit the training step function for faster execution
-        self.train_step = (partial(train_step,
+        self.train_step = jit(partial(train_step,
                                       optimiser = self.optimiser,
                                       loss_fn = self.train_loss_fn))
-
 
     def train_epoch(self, random_sampling=False):
         """Train network for one epoch"""
@@ -101,7 +100,7 @@ class PhysicsLearner:
         if random_sampling:
             self.train_dg.resample_input_points()
         else:
-            pass #self.train_dg.shuffle_epoch_indices()
+            self.train_dg.shuffle_epoch_indices()
 
         loss = 0.
         for graph_idx in self.train_dg.epoch_indices:
@@ -109,11 +108,11 @@ class PhysicsLearner:
             self.params, self.opt_state, loss_idx = self.train_step(self.params, self.opt_state, theta_tuple_idx)
 
             loss += loss_idx
-            print(f'graph_idx {graph_idx:.2f} loss: {loss_idx}, total loss: {loss:.2f}')
+            jax.debug.print('graph_idx {} loss: {:.2f}, total loss: {:.2f}', graph_idx, loss_idx, loss)
             
         # train loss for epoch is mean total potential energy
         self.train_loss = loss / self.train_dg.epoch_size
-        print(f'loss: {self.train_loss}')
+        jax.debug.print('loss: {:.2f}', self.train_loss)
 
     def fit_pinn(self, n_epochs: int, save_params = False, random_sampling=False):
         """Train network for 'n_epochs' epochs"""

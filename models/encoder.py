@@ -162,7 +162,6 @@ class PrimalGraphEmulator(nn.Module):
         if self.boundary_adjust_fn is not None:
             Upred = self.boundary_adjust_fn(Upred)
 
-        thing = jnp.where(jnp.sum(self.boundary_adjust_fn(Upred), axis=1)!=0)[0]
 
         # return displacment prediction array
-        return Upred, thing
+        return Upred
