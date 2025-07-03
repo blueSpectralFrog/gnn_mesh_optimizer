@@ -52,17 +52,7 @@ if __name__ == "__main__":
 
     #################################
     # EVALUATE 
-    #################################
-    graph_inputs.add(chosen_cells=test_cell_data, 
-                     chosen_nodes=jnp.unique(jnp.hstack(test_cell_data)))   
-
-    # Create a remapping array
-    remap = jnp.full(jnp.unique(jnp.hstack(graph_inputs.mesh_connectivity)).shape[0], -1)
-    remap = remap.at[graph_inputs.chosen_nodes].set(jnp.arange(len(graph_inputs.chosen_nodes)))
-
-    # Apply the remap
-    remapped_train_cell_data = remap[graph_inputs.chosen_cells]
-    graph_inputs.add(remapped_train_cell_data=remapped_train_cell_data)
+    ################################# 
     
     run_evaluation(graph_inputs, 'squishy_512', config_dict['K'], config_dict['n_epochs'], config_dict['lr'], data_directory, '')
 

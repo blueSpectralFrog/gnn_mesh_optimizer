@@ -225,7 +225,7 @@ def run_evaluation(graph_inputs, data_path: str, K: int, n_epochs: int, lr: floa
 
     # load test simulation data
     # test_data = utils_data.DataLoader(data_path, 'test') -> replaced by ml.extract_graph_inputs which already gets node data
-    logging.info(f'Number of test data points: {graph_inputs.chosen_node_data.shape[0]}')
+    logging.info(f'Number of test data points: {graph_inputs.node_data.shape[0]}')
 
     # create dictionary of hyperparameters of the GNN emulator
     config_dict = training.utils.create_config_dict(K, n_epochs, lr, ref_model._output_dim)
